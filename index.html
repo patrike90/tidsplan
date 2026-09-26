@@ -112,6 +112,11 @@ button,input,textarea{font:inherit;color:inherit}
 .row.proj .lcell{background:var(--surface2)}
 .row.proj .lname .nm{font-weight:700}
 .row.child .lname{padding-left:30px}
+.row.child2 .lname{padding-left:54px}
+.row.plan .lcell{background:var(--line)}
+.row.plan .lname .nm{font-size:15px}
+.psum.fixed{cursor:default}
+.ovnote{font-size:12px;color:var(--muted)}
 .pcell{display:flex;align-items:center;height:100%;min-width:0}
 .tog{flex:0 0 26px;height:100%;border:0;background:none;cursor:pointer;color:var(--muted);font-size:12px;padding:0}
 .tog:hover{color:var(--ink)}
@@ -328,9 +333,9 @@ const FS={dead:new Map(),titleMod:0}; // behålls för kompatibilitet med import
 function lsSave(){}
 function lsLoad(){return false}
 const chains=new Map();
-const toRow=(id,t)=>({id,plan_id:planId,kind:t.kind||"task",parent:t.parent||null,name:t.name,color:t.color,hours:t.hours||0,note:t.note||"",collapsed:!!t.collapsed,
+const toRow=(id,t)=>({id,plan_id:t.planId||planId,kind:t.kind||"task",parent:t.parent||null,name:t.name,color:t.color,hours:t.hours||0,note:t.note||"",collapsed:!!t.collapsed,
   segs:t.segs.map(([s,e])=>({s:fd(s),e:fd(e)})),created:Math.round(t.created||0)});
-const fromRow=r=>({mod:Date.parse(r.updated_at)||0,who:r.updated_email||"",at:r.updated_at||"",kind:r.kind==="project"?"project":"task",parent:r.parent||"",collapsed:!!r.collapsed,
+const fromRow=r=>({planId:r.plan_id,mod:Date.parse(r.updated_at)||0,who:r.updated_email||"",at:r.updated_at||"",kind:r.kind==="project"?"project":"task",parent:r.parent||"",collapsed:!!r.collapsed,
   name:r.name||"",color:CMAP[r.color]?r.color:"Blå",hours:Number(r.hours)||0,note:r.note||"",created:Number(r.created)||0,
   segs:(Array.isArray(r.segs)?r.segs:[]).filter(p=>p&&p.s&&p.e).map(p=>[pd(p.s),pd(p.e)])});
 function sbErr(e){const m=(e&&(e.message||e.error_description))||"";return /JWT|expired|401/i.test(m)?"Inloggningen har gått ut – logga in igen.":/fetch|network|Failed/i.test(m)?"Ingen anslutning – ändringen sparas när du är uppkopplad igen.":"Kunde inte spara: "+m}
@@ -362,14 +367,27 @@ function computeRange(){
   const endIdx=toIdx(Math.max(mx,TODAY),false)+40;
   NDAYS=Math.max(130,Math.ceil((endIdx+1)/5)*5);
 }
+// ---------- översikt: alla planer ----------
+const OV="__all";CMAP.Plan="#37474F";
+let vplans=new Map(),ovCollapsed=new Set();try{ovCollapsed=new Set(JSON.parse(localStorage.getItem("tidsplan-ov")||"[]"))}catch(e){}
+const isOv=()=>planId===OV;
+const T=id=>tasks.get(id)||vplans.get(id);
+const isPlanRow=id=>String(id).startsWith("plan:");
+const planTasks=u=>[...tasks].filter(([,t])=>t.planId===u&&t.kind!=="project");
 const isProj=id=>{const t=tasks.get(id);return !!t&&t.kind==="project"};
-const kids=pid=>[...tasks].filter(([,t])=>t.kind!=="project"&&t.parent===pid);
-function spanOf(id){const t=tasks.get(id);let mn=Infinity,mx=-Infinity;
-  const segs=t.kind==="project"?kids(id).flatMap(([,c])=>c.segs):t.segs;segs.forEach(([a,b])=>{mn=Math.min(mn,a);mx=Math.max(mx,b)});return isFinite(mn)?[mn,mx]:null}
-function hoursOf(id){const t=tasks.get(id);return t.kind==="project"?kids(id).reduce((a,[,c])=>a+(c.hours||0),0):(t.hours||0)}
-function wdOf(id){const t=tasks.get(id);if(t.kind==="project"){const sp=spanOf(id);return sp?workdays(sp[0],sp[1]):0}return t.segs.reduce((a,[s,e])=>a+workdays(s,e),0)}
+const kids=pid=>isPlanRow(pid)?[...tasks].filter(([,t])=>t.planId===pid.slice(5)&&(t.kind==="project"||!t.parent||!isProj(t.parent))):[...tasks].filter(([,t])=>t.kind!=="project"&&t.parent===pid);
+function spanOf(id){const t=T(id);if(!t)return null;let mn=Infinity,mx=-Infinity;
+  const segs=t.kind==="plan"?planTasks(t.pid).flatMap(([,c])=>c.segs):t.kind==="project"?kids(id).flatMap(([,c])=>c.segs):t.segs;segs.forEach(([a,b])=>{mn=Math.min(mn,a);mx=Math.max(mx,b)});return isFinite(mn)?[mn,mx]:null}
+function hoursOf(id){const t=T(id);if(t.kind==="plan")return planTasks(t.pid).reduce((a,[,c])=>a+(c.hours||0),0);return t.kind==="project"?kids(id).reduce((a,[,c])=>a+(c.hours||0),0):(t.hours||0)}
+function wdOf(id){const t=T(id);if(t.kind==="project"||t.kind==="plan"){const sp=spanOf(id);return sp?workdays(sp[0],sp[1]):0}return t.segs.reduce((a,[s,e])=>a+workdays(s,e),0)}
 function displayList(all){ // [{id,t,level}] – projekt följt av sina undermoment
   const byStart=(a,b)=>{const sa=spanOf(a[0]),sb=spanOf(b[0]);return (sa?sa[0]:1e9)-(sb?sb[0]:1e9)||a[1].created-b[1].created};
+  if(isOv()){
+    vplans=new Map([...plans.values()].map(p=>["plan:"+p.id,{kind:"plan",pid:p.id,name:p.title,color:"Plan",collapsed:ovCollapsed.has(p.id),segs:[],created:0,note:""}]));
+    const out=[];[...vplans].sort((a,b)=>byStart(a,b)||a[1].name.localeCompare(b[1].name,"sv")).forEach(([vid,v])=>{out.push({id:vid,t:v,level:0});if(!all&&v.collapsed)return;
+      kids(vid).sort(byStart).forEach(([id,t])=>{out.push({id,t,level:1});if(t.kind==="project"&&(all||!t.collapsed))kids(id).sort(byStart).forEach(([cid,c])=>out.push({id:cid,t:c,level:2}))})});
+    return out;
+  }
   const top=[...tasks].filter(([,t])=>t.kind==="project"||!t.parent||!isProj(t.parent)).sort(byStart);
   const out=[];top.forEach(([id,t])=>{out.push({id,t,level:0});if(t.kind==="project"&&(all||!t.collapsed))kids(id).sort(byStart).forEach(([cid,c])=>out.push({id:cid,t:c,level:1}))});
   return out;
@@ -405,25 +423,25 @@ function render(){
   const list=displayList(false);let tot=0,mn=Infinity,mx=-Infinity,nTask=0;
   tasks.forEach(t=>{if(t.kind!=="project"){nTask++;tot+=t.hours||0;t.segs.forEach(([s,e])=>{mn=Math.min(mn,s);mx=Math.max(mx,e)})}});
   list.forEach(({id,t,level})=>{
-    const P=t.kind==="project";const sp=spanOf(id);
-    const row=el("div","row"+(P?" proj":"")+(level?" child":""));const lc=el("div","lcell");
+    const PL=t.kind==="plan";const P=t.kind==="project"||PL;const sp=spanOf(id);
+    const row=el("div","row"+(P?" proj":"")+(PL?" plan":"")+(level===1?" child":"")+(level===2?" child2":""));const lc=el("div","lcell");
     const c0=el("div","pcell");c0.style.padding="0";
     if(P){const tg=el("button","tog",t.collapsed?"▸":"▾");tg.type="button";tg.dataset.toggle=id;tg.setAttribute("aria-expanded",String(!t.collapsed));tg.setAttribute("aria-label",(t.collapsed?"Fäll ut ":"Fäll ihop ")+t.name);c0.append(tg)}
-    const nb=el("button","lname");nb.type="button";nb.dataset.open=id;if(P)nb.style.paddingLeft="0";
+    const nb=el("button","lname");nb.type="button";nb.dataset.open=id;if(P)nb.style.paddingLeft="0";if(PL)nb.title="Öppna planen "+t.name;
     const dot=el("span","dot");dot.style.background=CMAP[t.color];
     nb.append(dot,el("span","nm",t.name));
-    if(P)nb.append(el("span","parts",String(kids(id).length)));else if(t.segs.length>1)nb.append(el("span","parts","×"+t.segs.length));
+    if(PL)nb.append(el("span","parts",String(planTasks(t.pid).length)));else if(P)nb.append(el("span","parts",String(kids(id).length)));else if(t.segs.length>1)nb.append(el("span","parts","×"+t.segs.length));
     c0.append(nb);
-    if(P){const ab=el("button","addc","+");ab.setAttribute("aria-label","Lägg till undermoment i "+t.name);ab.type="button";ab.dataset.addchild=id;ab.title="Lägg till undermoment";c0.append(ab)}
+    if(P&&!PL){const ab=el("button","addc","+");ab.setAttribute("aria-label","Lägg till undermoment i "+t.name);ab.type="button";ab.dataset.addchild=id;ab.title="Lägg till undermoment";c0.append(ab)}
     const h=hoursOf(id);
     lc.append(c0,el("div","num",sp?fd(sp[0]).slice(2):"–"),el("div","num",sp?fd(sp[1]).slice(2):"–"),el("div","num",String(wdOf(id))),el("div","num",h?String(Math.round(h*10)/10).replace(".",","):"–"));
     const tr=el("div","track");tr.dataset.id=id;tr.style.width=NDAYS*DW+"px";
     let lastIdx=null;
     if(P){
       if(sp){const a=toIdx(sp[0],true),b=toIdx(sp[1],false);
-        const d=el("div","psum");d.dataset.id=id;d.tabIndex=0;d.style.left=a*DW+"px";d.style.width=Math.max(1,b-a+1)*DW+"px";d.style.background=CMAP[t.color];d.style.setProperty("--pc",CMAP[t.color]);
+        const d=el("div","psum"+(PL?" fixed":""));d.dataset.id=id;d.tabIndex=PL?-1:0;d.style.left=a*DW+"px";d.style.width=Math.max(1,b-a+1)*DW+"px";d.style.background=CMAP[t.color];d.style.setProperty("--pc",CMAP[t.color]);
         d.setAttribute("aria-label",`Projekt ${t.name}: ${fd(sp[0])} till ${fd(sp[1])}. Piltangenter flyttar hela projektet.`);tr.append(d);lastIdx=b;
-        if(t.collapsed)kids(id).forEach(([,c])=>c.segs.forEach(([s1,e1])=>{const m=el("div","mini");const x=toIdx(s1,true),y=toIdx(e1,false);m.style.left=x*DW+1+"px";m.style.width=Math.max(1,y-x+1)*DW-2+"px";m.style.background=CMAP[c.color];tr.append(m)}));
+        if(t.collapsed)(PL?planTasks(t.pid):kids(id)).forEach(([,c])=>c.segs.forEach(([s1,e1])=>{const m=el("div","mini");const x=toIdx(s1,true),y=toIdx(e1,false);m.style.left=x*DW+1+"px";m.style.width=Math.max(1,y-x+1)*DW-2+"px";m.style.background=CMAP[c.color];tr.append(m)}));
       }
     }else{
       const segs=t.segs.map((p,k)=>[p,k]).sort((x,y)=>x[0][0]-y[0][0]);
@@ -436,7 +454,7 @@ function render(){
     row.append(lc,tr);body.append(row);
   });
   // tom rad för nytt moment
-  const nr=el("div","row newrow");const nl=el("div","lcell");const nbtn=el("button","lname");nbtn.type="button";nbtn.id="newRowBtn";nbtn.append(el("span","nm","+ Dra i raden eller klicka för nytt moment"));
+  const nr=el("div","row newrow");if(isOv())nr.hidden=true;const nl=el("div","lcell");const nbtn=el("button","lname");nbtn.type="button";nbtn.id="newRowBtn";nbtn.append(el("span","nm","+ Dra i raden eller klicka för nytt moment"));
   const nc=el("div");nc.style.padding="0";nc.append(nbtn);nl.append(nc);
   const ntr=el("div","track");ntr.dataset.id="__new";ntr.style.width=NDAYS*DW+"px";nr.append(nl,ntr);body.append(nr);
   // overlay: helgdagar + idag
@@ -445,7 +463,9 @@ function render(){
     if(n===TODAY){const s=el("div","strip tod");s.style.left=k*DW+DW/2-1+"px";ov.append(s)}}
   body.prepend(ov);
   $("stN").textContent=nTask;$("stH").textContent=String(Math.round(tot*10)/10).replace(".",",");
-  {const ps=[...tasks].filter(([,t])=>t.kind==="project");$("btnFold").hidden=!ps.length;$("btnFold").textContent=ps.some(([,t])=>!t.collapsed)?"Fäll ihop alla":"Fäll ut alla"}
+  if(isOv()){$("btnFold").hidden=!plans.size;$("btnFold").textContent=[...plans.keys()].some(k=>!ovCollapsed.has(k))?"Fäll ihop alla planer":"Fäll ut alla planer"}
+  else{const ps=[...tasks].filter(([,t])=>t.kind==="project");$("btnFold").hidden=!ps.length;$("btnFold").textContent=ps.some(([,t])=>!t.collapsed)?"Fäll ihop alla":"Fäll ut alla"}
+  ["btnProj","btnAdd","btnImport","btnDelPlan","btnSaveJson"].forEach(b=>{const e=$(b);if(e)e.hidden=isOv()});$("planTitle").readOnly=isOv();
   $("stSpan").textContent=isFinite(mn)?`${fd(mn)} – ${fd(mx)} (${workdays(mn,mx)} dgr)`:"–";
   $("gwrap").scrollLeft=sl;
   if(openId)fillPanelSummary();
@@ -458,6 +478,7 @@ gw.addEventListener("pointerdown",ev=>{
   if(ev.button!==0)return;
   const seg=ev.target.closest(".seg"),tr=ev.target.closest(".track"),ps=ev.target.closest(".psum");
   if(!tr)return;
+  if(isPlanRow(tr.dataset.id))return; // planrader i översikten flyttas inte
   if(ps){const id=ps.dataset.id;const els=[ps,...kids(id).flatMap(([cid])=>[...gw.querySelectorAll(`.track[data-id="${cid}"] > *`)])];
     const lb=tr.querySelector(".lbl");if(lb)els.push(lb);tr.querySelectorAll(".mini").forEach(m=>els.push(m));
     const sp=spanOf(id);dragging={id,type:"p",x0:ev.clientX,a:toIdx(sp[0],true),b:toIdx(sp[1],false),el:ps,els:[...new Set(els)],moved:false,tr,pid:ev.pointerId};return}
@@ -474,7 +495,7 @@ gw.addEventListener("pointerdown",ev=>{
   dragging.tr=dragging.tr||tr;dragging.pid=ev.pointerId;
 });
 gw.addEventListener("pointermove",ev=>{
-  if(!dragging){const pp=ev.target.closest&&ev.target.closest(".psum");if(pp){const t=tasks.get(pp.dataset.id),sp=spanOf(pp.dataset.id);showTip(ev.clientX,ev.clientY,`${t.name} · ${fd(sp[0])} – ${fd(sp[1])} · ${kids(pp.dataset.id).length} undermoment`);return}
+  if(!dragging){const pp=ev.target.closest&&ev.target.closest(".psum");if(pp){const t=T(pp.dataset.id),sp=spanOf(pp.dataset.id);showTip(ev.clientX,ev.clientY,`${t.name} · ${fd(sp[0])} – ${fd(sp[1])} · ${kids(pp.dataset.id).length} undermoment`);return}
     const s=ev.target.closest&&ev.target.closest(".seg");if(s){const t=tasks.get(s.dataset.id),[a,b]=t.segs[+s.dataset.k];showTip(ev.clientX,ev.clientY,`${t.name} · ${fd(a)} → ${fd(b)} · ${workdays(a,b)} arb.dgr`)}else tip.hidden=true;return}
   const dx=ev.clientX-dragging.x0;if(!dragging.moved&&Math.abs(dx)>4){dragging.moved=true;try{dragging.tr.setPointerCapture(dragging.pid)}catch(e){}}if(!dragging.moved)return;
   const dc=Math.round(dx/DW);const d=dragging;
@@ -499,7 +520,7 @@ function endDrag(ev){
   if(d.type==="p"){shiftProject(d.id,d.dc||0);renderPending=false;render();return}
   if(d.type==="new"){
     const s=atIdx(d.na),e=atIdx(d.nb);
-    if(d.id!=="__new"&&isProj(d.id)){const id=newId();const p=tasks.get(d.id);tasks.set(id,{kind:"task",parent:d.id,collapsed:false,name:"Nytt undermoment",color:p.color,hours:0,note:"",created:Date.now(),segs:[[s,e]]});if(p.collapsed){p.collapsed=false;persist(d.id)}persist(id);render();openPanel(id,true);return}
+    if(d.id!=="__new"&&isProj(d.id)){const id=newId();const p=tasks.get(d.id);tasks.set(id,{planId:p.planId,kind:"task",parent:d.id,collapsed:false,name:"Nytt undermoment",color:p.color,hours:0,note:"",created:Date.now(),segs:[[s,e]]});if(p.collapsed){p.collapsed=false;persist(d.id)}persist(id);render();openPanel(id,true);return}
     if(d.id==="__new"){const id=newId();tasks.set(id,{kind:"task",parent:"",collapsed:false,name:"Nytt moment",color:"Blå",hours:0,note:"",created:Date.now(),segs:[[s,e]]});persist(id);render();openPanel(id,true);return}
     const t=tasks.get(d.id);t.segs.push([s,e]);normalize(t);persist(d.id);
   }else{
@@ -527,7 +548,7 @@ gw.addEventListener("dblclick",ev=>{
 });
 gw.addEventListener("keydown",ev=>{ // tangentbord: piltangenter flyttar vald period
   const pp=ev.target.closest&&ev.target.closest(".psum");
-  if(pp){if(ev.key==="Enter"){openPanel(pp.dataset.id);return}if(ev.key!=="ArrowLeft"&&ev.key!=="ArrowRight")return;ev.preventDefault();const pid=pp.dataset.id;shiftProject(pid,ev.key==="ArrowRight"?1:-1);render();const again=gw.querySelector(`.psum[data-id="${pid}"]`);again&&again.focus();return}
+  if(pp){if(isPlanRow(pp.dataset.id))return;if(ev.key==="Enter"){openPanel(pp.dataset.id);return}if(ev.key!=="ArrowLeft"&&ev.key!=="ArrowRight")return;ev.preventDefault();const pid=pp.dataset.id;shiftProject(pid,ev.key==="ArrowRight"?1:-1);render();const again=gw.querySelector(`.psum[data-id="${pid}"]`);again&&again.focus();return}
   const seg=ev.target.closest&&ev.target.closest(".seg");if(!seg)return;
   if(ev.key==="Enter"){openPanel(seg.dataset.id);return}
   if(ev.key!=="ArrowLeft"&&ev.key!=="ArrowRight")return;ev.preventDefault();
@@ -537,9 +558,10 @@ gw.addEventListener("keydown",ev=>{ // tangentbord: piltangenter flyttar vald pe
   const again=[...document.querySelectorAll(`.seg[data-id="${id}"]`)].find(x=>+x.dataset.k===Math.min(k,t.segs.length-1));again&&again.focus();
 });
 $("gbody").addEventListener("click",ev=>{
-  const tg=ev.target.closest("[data-toggle]");if(tg){const t=tasks.get(tg.dataset.toggle);t.collapsed=!t.collapsed;persistSoon(tg.dataset.toggle);render();const f=gw.querySelector(`[data-toggle="${tg.dataset.toggle}"]`);f&&f.focus();return}
+  const tg=ev.target.closest("[data-toggle]");if(tg&&isPlanRow(tg.dataset.toggle)){const u=tg.dataset.toggle.slice(5);ovCollapsed.has(u)?ovCollapsed.delete(u):ovCollapsed.add(u);saveOv();render();const f=gw.querySelector(`[data-toggle="${tg.dataset.toggle}"]`);f&&f.focus();return}
+  if(tg){const t=tasks.get(tg.dataset.toggle);t.collapsed=!t.collapsed;persistSoon(tg.dataset.toggle);render();const f=gw.querySelector(`[data-toggle="${tg.dataset.toggle}"]`);f&&f.focus();return}
   const ac=ev.target.closest("[data-addchild]");if(ac){addChild(ac.dataset.addchild);return}
-  const b=ev.target.closest("[data-open]");if(b)openPanel(b.dataset.open);if(ev.target.closest("#newRowBtn"))openNew()});
+  const b=ev.target.closest("[data-open]");if(b&&isPlanRow(b.dataset.open)){openPlan(b.dataset.open.slice(5));return}if(b)openPanel(b.dataset.open);if(ev.target.closest("#newRowBtn"))openNew()});
 
 // ---------- editor ----------
 function nextFree(list){return snapStart(Math.max(TODAY,list.reduce((m,[,t])=>Math.max(m,...t.segs.map(x=>x[1]+1)),TODAY)))}
@@ -549,7 +571,7 @@ function openNew(){
 }
 function addChild(pid){
   const p=tasks.get(pid);const ks=kids(pid);const s=ks.length?nextFree(ks):nextFree(sorted());
-  const id=newId();tasks.set(id,{kind:"task",parent:pid,collapsed:false,name:"Nytt undermoment",color:p.color,hours:0,note:"",created:Date.now(),segs:[[s,addWd(s,4)]]});
+  const id=newId();tasks.set(id,{planId:p.planId,kind:"task",parent:pid,collapsed:false,name:"Nytt undermoment",color:p.color,hours:0,note:"",created:Date.now(),segs:[[s,addWd(s,4)]]});
   if(p.collapsed){p.collapsed=false;persist(pid)}persist(id);render();openPanel(id,true);
 }
 function newProject(){
@@ -564,7 +586,7 @@ function openPanel(id,focusName){
   $("pHead").textContent=P?"Redigera projekt":"Redigera moment";$("fNameLbl").textContent=P?"Projekt":"Moment";
   $("fHoursBox").hidden=P;$("fPeriodsBox").hidden=P;$("fParentBox").hidden=P;$("fChildBox").hidden=!P;
   if(!P){const sel=$("fParent");sel.innerHTML="";const o0=el("option",null,"Inget projekt");o0.value="";sel.append(o0);
-    [...tasks].filter(([,x])=>x.kind==="project").sort((a,b)=>a[1].name.localeCompare(b[1].name,"sv")).forEach(([pid,p])=>{const o=el("option",null,p.name);o.value=pid;sel.append(o)});
+    [...tasks].filter(([,x])=>x.kind==="project"&&(!isOv()||x.planId===t.planId)).sort((a,b)=>a[1].name.localeCompare(b[1].name,"sv")).forEach(([pid,p])=>{const o=el("option",null,p.name);o.value=pid;sel.append(o)});
     sel.value=isProj(t.parent)?t.parent:""}
   const sw=$("fColors");sw.innerHTML="";COLORS.forEach(([n,h])=>{const b=el("button","swatch");b.type="button";b.style.background=h;b.title=n;b.setAttribute("role","radio");b.setAttribute("aria-label",n);b.setAttribute("aria-checked",String(t.color===n));b.onclick=()=>{const tt=tasks.get(id);if(!tt)return;const old=tt.color;tt.color=n;persistSoon(id);
     if(tt.kind==="project")kids(id).forEach(([cid,c])=>{if(c.color===old){c.color=n;persistSoon(cid)}});openPanel(id);render()};sw.append(b)});
@@ -602,18 +624,19 @@ let armT;$("fDelete").onclick=()=>{const b=$("fDelete");const P=isProj(openId);c
 
 // ---------- toolbar ----------
 $("btnAdd").onclick=openNew;$("btnProj").onclick=newProject;
-$("btnFold").onclick=()=>{const ps=[...tasks].filter(([,t])=>t.kind==="project");const anyOpen=ps.some(([,t])=>!t.collapsed);ps.forEach(([id,t])=>{if(t.collapsed!==anyOpen){t.collapsed=anyOpen;persistSoon(id)}});render()};
+$("btnFold").onclick=()=>{if(isOv()){const anyOpen=[...plans.keys()].some(k=>!ovCollapsed.has(k));ovCollapsed=new Set(anyOpen?[...plans.keys()]:[]);saveOv();render();return}const ps=[...tasks].filter(([,t])=>t.kind==="project");const anyOpen=ps.some(([,t])=>!t.collapsed);ps.forEach(([id,t])=>{if(t.collapsed!==anyOpen){t.collapsed=anyOpen;persistSoon(id)}});render()};
 $("btnToday").onclick=()=>{gw.scrollLeft=Math.max(0,toIdx(TODAY,true)*DW-DW*10)};
 ["z1","z2","z3"].forEach(z=>$(z).onclick=()=>{const c=gw.scrollLeft/DW;DW=+$(z).dataset.dw;["z1","z2","z3"].forEach(q=>$(q).setAttribute("aria-pressed",String(q===z)));render();gw.scrollLeft=c*DW});
-let titleT;$("planTitle").oninput=()=>{clearTimeout(titleT);titleT=setTimeout(async()=>{if(!sb||!planId)return;const title=$("planTitle").value.trim()||"Namnlös plan";
+let titleT;$("planTitle").oninput=()=>{clearTimeout(titleT);titleT=setTimeout(async()=>{if(!sb||!planId||isOv())return;const title=$("planTitle").value.trim()||"Namnlös plan";
   const p=plans.get(planId);if(p)p.title=title;fillPlanSel();const {error}=await sb.from("plans").update({title}).eq("id",planId);if(error)setSave(sbErr(error),true);else setSave("Sparat "+hhmm())},600)};
 function csv(){
   const list=displayList(true);const maxP=Math.max(1,...list.map(({t})=>t.segs.length));
   const head=["Nr","Typ","Projekt","Moment"];for(let i=1;i<=maxP;i++)head.push(i===1?"Start":"Start "+i,i===1?"Stopp":"Stopp "+i);head.push("Arbetsdagar","Timmar","Färg","Kommentar");
   const q=v=>{v=String(v??"");return /[;"\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
   const rows=[head.map(q).join(";")];
-  list.forEach(({id,t,level},i)=>{const P=t.kind==="project";const sp=spanOf(id);
-    const r=[i+1,P?"Projekt":level?"Undermoment":"Moment",level?tasks.get(t.parent).name:"",t.name];
+  list.forEach(({id,t,level},i)=>{const P=t.kind==="project"||t.kind==="plan";const sp=spanOf(id);
+    const pn=t.parent&&tasks.get(t.parent)?tasks.get(t.parent).name:"";
+    const r=[i+1,t.kind==="plan"?"Plan":t.kind==="project"?"Projekt":pn?"Undermoment":"Moment",pn,t.name];
     for(let k=0;k<maxP;k++){if(P){r.push(k===0&&sp?fd(sp[0]):"",k===0&&sp?fd(sp[1]):"");continue}const p=t.segs[k];r.push(p?fd(p[0]):"",p?fd(p[1]):"")}
     const h=hoursOf(id);r.push(wdOf(id),h?String(h).replace(".",","):"",t.color,t.note);rows.push(r.map(q).join(";"))});
   return "\ufeff"+rows.join("\r\n");
@@ -717,7 +740,7 @@ async function doImport(replace){
 $("iReplace").onclick=()=>doImport(true);$("iAdd").onclick=()=>doImport(false);
 document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("iDlg").hidden)closeImport()});
 async function exportPdf(){
-  const list=displayList(false).filter(({id})=>spanOf(id));
+  const list=displayList(false).filter(({id})=>spanOf(id));if(!list.length&&isOv()){setSave("Planerna saknar moment med datum.",true);return}
   if(!list.length){setSave("Det finns inga moment med datum att exportera.",true);return}
   if(!window.jspdf){setSave("Skapar PDF…");try{await loadScript("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js")}catch(e){setSave("PDF-verktyget kunde inte laddas (kräver internet).",true);return}}
   const size=$("pdfSize").value;const doc=new window.jspdf.jsPDF({orientation:"landscape",unit:"mm",format:size});
@@ -764,21 +787,21 @@ async function exportPdf(){
     doc.setDrawColor(185,195,202);doc.line(TX,by,TX,by+bh);
     if(TODAY>=P0&&TODAY<=P1&&dow(TODAY)<5){const tx=TX+pIdx(TODAY)*dw+dw/2;doc.setDrawColor(208,52,44);doc.setLineWidth(.4);doc.line(tx,by,tx,by+bh);doc.setLineWidth(.1)}
     rows.forEach(({id,t,level},r)=>{
-      const P=t.kind==="project";const ry=by+r*RH,ty=ry+RH/2+FS*.13;const nr=pg*perPage+r+1;
+      const PL=t.kind==="plan";const P=t.kind==="project"||PL;const ry=by+r*RH,ty=ry+RH/2+FS*.13;const nr=pg*perPage+r+1;
       const [S,E]=spanOf(id);const wd=wdOf(id),h=hoursOf(id);
       doc.setFontSize(FS);doc.setTextColor(26,34,44);doc.setFont("helvetica",P?"bold":"normal");
       let x=M;const c=rgb(CMAP[t.color]);
       doc.text(String(nr),x+cols[0][1]-1.5,ty,{align:"right"});x+=cols[0][1];
-      const ind=level?4:0;
+      const ind=level*4;
       doc.setFillColor(...c);doc.rect(x+1.2+ind,ry+RH/2-1.2,2.4,2.4,"F");
-      doc.text(trunc(t.name+(!P&&t.segs.length>1?` (${t.segs.length} perioder)`:"")+(P&&t.collapsed?` (${kids(id).length} undermoment)`:""),cols[1][1]-6-ind),x+5+ind,ty);x+=cols[1][1];
+      doc.text(trunc(t.name+(!P&&t.segs.length>1?` (${t.segs.length} perioder)`:"")+(P&&t.collapsed?(PL?` (${planTasks(t.pid).length} moment)`:` (${kids(id).length} undermoment)`):""),cols[1][1]-6-ind),x+5+ind,ty);x+=cols[1][1];
       [fd(S),fd(E),String(wd),h?String(Math.round(h*10)/10).replace(".",","):"–"].forEach((v,k)=>{doc.text(v,x+cols[k+2][1]-1.5,ty,{align:"right"});x+=cols[k+2][1]});
       let lastB;
       if(P){
         const a=pIdx(snapStart(S)),b=pIdx(E);lastB=b;const x0=TX+a*dw,x1=TX+(b+1)*dw,top=ry+1.3,hh=Math.min(2.2,RH*.35),cap=Math.min(1.8,(x1-x0)/2);
         doc.setFillColor(...c);doc.rect(x0,top,x1-x0,hh,"F");
         doc.triangle(x0,top+hh,x0+cap,top+hh,x0,top+hh+cap*1.1,"F");doc.triangle(x1,top+hh,x1-cap,top+hh,x1,top+hh+cap*1.1,"F");
-        if(t.collapsed)kids(id).forEach(([,ch])=>{const cc=rgb(CMAP[ch.color]);doc.setFillColor(...cc);ch.segs.forEach(([s1,e1])=>{const a1=pIdx(snapStart(s1)),b1=pIdx(e1);doc.rect(TX+a1*dw+.2,ry+RH-2.2,Math.max(.4,(b1-a1+1)*dw-.4),1.2,"F")})});
+        if(t.collapsed)(PL?planTasks(t.pid):kids(id)).forEach(([,ch])=>{const cc=rgb(CMAP[ch.color]);doc.setFillColor(...cc);ch.segs.forEach(([s1,e1])=>{const a1=pIdx(snapStart(s1)),b1=pIdx(e1);doc.rect(TX+a1*dw+.2,ry+RH-2.2,Math.max(.4,(b1-a1+1)*dw-.4),1.2,"F")})});
       }else{
         const segs=[...t.segs].sort((a,b)=>a[0]-b[0]);
         segs.forEach(([s,e],k)=>{
@@ -813,33 +836,34 @@ $("btnCsv").onclick=async()=>{
 };
 
 // ---------- planer ----------
-function fillPlanSel(){const sel=$("planSel");sel.innerHTML="";[...plans.values()].sort((a,b)=>a.title.localeCompare(b.title,"sv")).forEach(p=>{const o=el("option",null,p.title);o.value=p.id;sel.append(o)});if(planId)sel.value=planId}
+function saveOv(){try{localStorage.setItem("tidsplan-ov",JSON.stringify([...ovCollapsed]))}catch(e){}}
+function fillPlanSel(){const sel=$("planSel");sel.innerHTML="";{const o=el("option",null,"Översikt – alla planer");o.value=OV;sel.append(o)}[...plans.values()].sort((a,b)=>a.title.localeCompare(b.title,"sv")).forEach(p=>{const o=el("option",null,p.title);o.value=p.id;sel.append(o)});if(planId)sel.value=planId}
 async function loadPlans(){const {data,error}=await sb.from("plans").select("id,title,updated_at");if(error)throw error;plans=new Map(data.map(p=>[p.id,p]));fillPlanSel()}
 async function createPlan(title){const {data,error}=await sb.from("plans").insert({title}).select("id,title,updated_at").single();if(error)throw error;plans.set(data.id,data);fillPlanSel();return data.id}
 function scheduleRender(){clearTimeout(renderT);renderT=setTimeout(()=>{render();if(openId&&tasks.has(openId)&&!$("panel").contains(document.activeElement))openPanel(openId);else if(openId&&!tasks.has(openId))closePanel()},60)}
 function liveState(ok,txt){const c=$("liveChip");c.className="fschip "+(ok?"ok":"warn");$("liveTxt").textContent=txt}
 async function openPlan(id){
   closePanel();planId=id;try{localStorage.setItem("tidsplan-plan",id)}catch(e){}
-  $("planSel").value=id;$("planTitle").value=(plans.get(id)||{}).title||"";
-  setSave("Hämtar plan…");
-  const {data,error}=await sb.from("items").select("*").eq("plan_id",id);
+  $("planSel").value=id;$("planTitle").value=id===OV?"Översikt – alla planer":(plans.get(id)||{}).title||"";
+  setSave(id===OV?"Hämtar alla planer…":"Hämtar plan…");
+  const {data,error}=id===OV?await sb.from("items").select("*"):await sb.from("items").select("*").eq("plan_id",id);
   if(error){setSave("Kunde inte hämta planen: "+sbErr(error),true);return}
   if(planId!==id)return;
-  tasks=new Map(data.map(r=>[r.id,fromRow(r)]));render();setSave(tasks.size?"Klar – ändringar sparas automatiskt och syns direkt hos alla.":"Planen är tom – lägg till ett projekt eller importera en fil.");
+  tasks=new Map(data.map(r=>[r.id,fromRow(r)]));render();if(id===OV)setSave(`Översikt över ${plans.size} planer – klicka på en plans namn för att öppna den. Moment kan flyttas och redigeras här också.`);else setSave(tasks.size?"Klar – ändringar sparas automatiskt och syns direkt hos alla.":"Planen är tom – lägg till ett projekt eller importera en fil.");
   subscribe(id);
 }
 function subscribe(id){
   if(chan)sb.removeChannel(chan);liveState(false,"Ansluter…");
   chan=sb.channel("plan-"+id)
-    .on("postgres_changes",{event:"INSERT",schema:"public",table:"items",filter:"plan_id=eq."+id},onRow)
-    .on("postgres_changes",{event:"UPDATE",schema:"public",table:"items",filter:"plan_id=eq."+id},onRow)
+    .on("postgres_changes",id===OV?{event:"INSERT",schema:"public",table:"items"}:{event:"INSERT",schema:"public",table:"items",filter:"plan_id=eq."+id},onRow)
+    .on("postgres_changes",id===OV?{event:"UPDATE",schema:"public",table:"items"}:{event:"UPDATE",schema:"public",table:"items",filter:"plan_id=eq."+id},onRow)
     .on("postgres_changes",{event:"DELETE",schema:"public",table:"items"},p=>{const oid=p.old&&p.old.id;if(!oid||!tasks.has(oid)||timers.has(oid))return;tasks.delete(oid);scheduleRender()})
     .on("postgres_changes",{event:"*",schema:"public",table:"plans"},p=>{
-      if(p.eventType==="DELETE"){const oid=p.old&&p.old.id;plans.delete(oid);fillPlanSel();if(oid===planId){setSave("Planen togs bort av en annan användare.",true);const nxt=[...plans.keys()][0];nxt?openPlan(nxt):createPlan("Ny tidsplan").then(openPlan)}return}
-      const r=p.new;plans.set(r.id,r);fillPlanSel();if(r.id===planId&&document.activeElement!==$("planTitle"))$("planTitle").value=r.title})
+      if(p.eventType==="DELETE"){const oid=p.old&&p.old.id;plans.delete(oid);fillPlanSel();if(isOv()){[...tasks].forEach(([k,t])=>{if(t.planId===oid)tasks.delete(k)});scheduleRender();return}if(oid===planId){setSave("Planen togs bort av en annan användare.",true);const nxt=[...plans.keys()][0];nxt?openPlan(nxt):createPlan("Ny tidsplan").then(openPlan)}return}
+      const r=p.new;plans.set(r.id,r);fillPlanSel();if(isOv())scheduleRender();if(r.id===planId&&document.activeElement!==$("planTitle"))$("planTitle").value=r.title})
     .subscribe(st=>{if(st==="SUBSCRIBED")liveState(true,"Live");else if(st==="CHANNEL_ERROR"||st==="TIMED_OUT")liveState(false,"Frånkopplad – försöker igen");else if(st==="CLOSED")liveState(false,"Frånkopplad")});
 }
-function onRow(p){const r=p.new;if(!r||r.plan_id!==planId||timers.has(r.id)||dragging&&dragging.id===r.id)return;const cur=tasks.get(r.id);const nt=fromRow(r);
+function onRow(p){const r=p.new;if(!r||(!isOv()&&r.plan_id!==planId)||timers.has(r.id)||dragging&&dragging.id===r.id)return;const cur=tasks.get(r.id);const nt=fromRow(r);
   if(cur&&cur.mod>nt.mod+2000)return; // lokal ändring är nyare
   tasks.set(r.id,nt);scheduleRender()}
 $("planSel").onchange=()=>openPlan($("planSel").value);
@@ -890,7 +914,7 @@ async function startApp(session){
   $("auth").hidden=true;started=true;
   try{await loadPlans()}catch(e){setSave(sbErr(e),true);return}
   let id=null;try{id=localStorage.getItem("tidsplan-plan")}catch(e){}
-  if(!id||!plans.has(id))id=[...plans.keys()][0];
+  if(!id||(!plans.has(id)&&id!==OV))id=[...plans.keys()][0];
   if(!id)id=await createPlan("Min första tidsplan");
   await openPlan(id);
 }
@@ -899,7 +923,8 @@ render();
   if(!CFG.url||!CFG.anonKey||/DITT-|DIN-/.test(CFG.url+CFG.anonKey)||!window.supabase){showAuth("config",window.supabase?"":"Supabase-biblioteket kunde inte laddas – kontrollera internetanslutningen.");return}
   const hashType=(location.hash.match(/type=(invite|recovery|signup|magiclink)/)||[])[1]||"";
   const hashErr=decodeURIComponent((location.hash.match(/error_description=([^&]+)/)||[])[1]||"").replace(/\+/g," ");
-  sb=window.supabase.createClient(CFG.url,CFG.anonKey,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true,flowType:"implicit"}});
+  let sbUrl=String(CFG.url).trim();try{sbUrl=new URL(sbUrl).origin}catch(e){} // tål t.ex. /rest/v1 eller snedstreck i slutet
+  sb=window.supabase.createClient(sbUrl,String(CFG.anonKey).trim(),{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true,flowType:"implicit"}});
   sb.auth.onAuthStateChange((ev)=>{if(ev==="PASSWORD_RECOVERY")showAuth("newpw");if(ev==="SIGNED_OUT"&&started)location.reload()});
   const {data:{session}}=await sb.auth.getSession();
   if(hashErr){history.replaceState(null,"",location.pathname);showAuth("login",hashErr.includes("expired")?"Länken har gått ut. Be om en ny eller använd Glömt lösenordet.":hashErr);return}
