@@ -89,6 +89,7 @@ button,input,textarea{font:inherit;color:inherit}
 .grid{position:relative;width:max-content;min-width:100%}
 .ghead{position:sticky;top:0;z-index:5;display:flex;background:var(--surface);border-bottom:1px solid var(--line2)}
 .lhead,.lcell{position:sticky;left:0;width:var(--leftW);flex:0 0 var(--leftW);display:grid;grid-template-columns:1fr 76px 76px 40px 48px;align-items:center;background:var(--surface);border-right:1px solid var(--line2)}
+.lcell{z-index:4}
 .lhead{z-index:6;align-self:stretch;align-items:end;padding-bottom:6px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600}
 .lhead>div,.lcell>div{padding:0 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .num{font-family:var(--mono);font-size:12px;font-variant-numeric:tabular-nums;text-align:right}
@@ -850,7 +851,7 @@ $("btnCsv").onclick=async()=>{
 };
 
 // ---------- mall: apparatskåp ----------
-const TPL=[["Driftkort","Turkos"],["Elschema","Orange"],["Programmering","Blå"],["Driftsättning","Grön"]],TPL_DAYS=3;
+const TPL=[["Driftkort","Orange"],["Elschema","Orange"],["Programmering","Lila"],["Driftsättning","Gul"]],TPL_DAYS=3;
 const nextWorkday=n=>{while(!isWorkday(n))n++;return n};
 function tplPlan(start){let n=nextWorkday(start);return TPL.map(([name,color])=>{const s=n;let c=1,e=n;while(c<TPL_DAYS){e++;if(isWorkday(e))c++}n=nextWorkday(e+1);return {name,color,s,e}})}
 function tplSuggestName(){const nums=[...tasks.values()].filter(t=>t.kind==="project").map(t=>(t.name.match(/^AS\s*(\d+)/i)||[])[1]).filter(Boolean).map(Number);return "AS"+((nums.length?Math.max(...nums):0)+1)}
