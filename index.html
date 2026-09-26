@@ -122,6 +122,14 @@ button,input,textarea{font:inherit;color:inherit}
 .row.plan .lname .nm{font-size:15px}
 .psum.fixed{cursor:default}
 .ovnote{font-size:12px;color:var(--muted)}
+.planbar>*{align-self:center}
+.planbar .fschip{align-self:center;height:28px;padding-top:0;padding-bottom:0}
+.planbar .btn,.planbar select{height:30px}
+.online{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap}
+.online:empty{display:none}
+.pres{display:inline-flex;align-items:center;gap:5px;height:28px;padding:0 9px 0 7px;border:1px solid var(--line2);border-radius:999px;background:var(--surface);font-size:11.5px;font-weight:700;letter-spacing:.03em;color:var(--ink);cursor:default}
+.pres::before{content:"";width:8px;height:8px;border-radius:50%;background:#3F9A4A;box-shadow:0 0 0 2px color-mix(in srgb,#3F9A4A 25%,transparent)}
+.pres.me{border-color:var(--accent)}
 .who{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:18px;padding:0 5px;border-radius:9px;background:var(--surface);border:1px solid var(--line2);font-size:10px;font-weight:700;letter-spacing:.02em;color:var(--ink)}
 .who.me{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 .lname .who{margin-left:2px}
@@ -230,6 +238,7 @@ button,input,textarea{font:inherit;color:inherit}
   <button class="btn" id="btnNewPlan">+ Ny plan</button>
   <button class="btn danger" id="btnDelPlan">Ta bort plan</button>
   <button class="fschip" id="liveChip" type="button" title="Anslutning för realtidsuppdateringar"><span id="liveTxt">Ansluter…</span></button>
+  <div class="online" id="online" aria-label="Inloggade just nu"></div>
   <div class="userbox"><span id="userEmail"></span><button class="btn" id="btnPeople">Resurser</button><button class="btn" id="btnCal">Min kalender</button><button class="btn" id="btnPw">Byt lösenord</button><button class="btn" id="btnLogout">Logga ut</button></div>
 </div>
 <div class="top">
@@ -953,6 +962,25 @@ $("btnPeople").onclick=()=>{
     row.append(badge,inp,el("small",null,`${e} · ${ts.length} moment${h?" · "+String(Math.round(h*10)/10).replace(".",",")+" h":""}${isOv()?"":" i den här planen"}`));box.append(row)});
   xOpen("pplDlg");
 };
+// ---------- inloggade just nu (presence) ----------
+let pchan=null;
+function presTrack(){if(pchan&&pchan._joined)pchan.track({email:myEmail(),plan:planId||"",at:Date.now()}).catch(()=>{})}
+function presRender(){
+  const box=$("online");box.innerHTML="";if(!pchan)return;
+  const st=pchan.presenceState()||{};const seen=new Map();
+  Object.values(st).forEach(arr=>(arr||[]).forEach(p=>{if(p&&p.email)seen.set(String(p.email).toLowerCase(),p)}));
+  [...seen.keys()].sort((a,b)=>(a===myEmail())-(b===myEmail())||personName(a).localeCompare(personName(b),"sv")).forEach(e=>{
+    const p=seen.get(e);const where=p.plan===OV?"översikten":(plans.get(p.plan)||{}).title||"";
+    const c=el("span","pres"+(e===myEmail()?" me":""),initials(e));
+    c.title=personName(e)+(e===myEmail()?" (du)":"")+" – inloggad"+(where?" · tittar på "+where:"");c.setAttribute("aria-label",c.title);box.append(c)});
+}
+function startPresence(){
+  if(pchan)return;
+  pchan=sb.channel("online-tidsplan",{config:{presence:{key:myEmail()}}});
+  pchan.on("presence",{event:"sync"},presRender).on("presence",{event:"join"},presRender).on("presence",{event:"leave"},presRender)
+    .subscribe(st=>{if(st==="SUBSCRIBED"){pchan._joined=true;presTrack()}});
+}
+window.addEventListener("beforeunload",()=>{try{pchan&&pchan.untrack()}catch(e){}});
 // ---------- planer ----------
 function saveOv(){try{localStorage.setItem("tidsplan-ov",JSON.stringify([...ovCollapsed]))}catch(e){}}
 function fillPlanSel(){const sel=$("planSel");sel.innerHTML="";{const o=el("option",null,"Översikt – alla planer");o.value=OV;sel.append(o)}[...plans.values()].sort((a,b)=>a.title.localeCompare(b.title,"sv")).forEach(p=>{const o=el("option",null,p.title);o.value=p.id;sel.append(o)});if(planId)sel.value=planId}
@@ -961,7 +989,7 @@ async function createPlan(title){const {data,error}=await sb.from("plans").inser
 function scheduleRender(){clearTimeout(renderT);renderT=setTimeout(()=>{render();if(openId&&tasks.has(openId)&&!$("panel").contains(document.activeElement))openPanel(openId);else if(openId&&!tasks.has(openId))closePanel()},60)}
 function liveState(ok,txt){const c=$("liveChip");c.className="fschip "+(ok?"ok":"warn");$("liveTxt").textContent=txt}
 async function openPlan(id){
-  closePanel();planId=id;try{localStorage.setItem("tidsplan-plan",id)}catch(e){}
+  closePanel();planId=id;presTrack();try{localStorage.setItem("tidsplan-plan",id)}catch(e){}
   $("planSel").value=id;$("planTitle").value=id===OV?"Översikt – alla planer":(plans.get(id)||{}).title||"";
   setSave(id===OV?"Hämtar alla planer…":"Hämtar plan…");
   const {data,error}=id===OV?await sb.from("items").select("*"):await sb.from("items").select("*").eq("plan_id",id);
@@ -978,7 +1006,7 @@ function subscribe(id){
     .on("postgres_changes",{event:"DELETE",schema:"public",table:"items"},p=>{const oid=p.old&&p.old.id;if(!oid||!tasks.has(oid)||timers.has(oid))return;tasks.delete(oid);scheduleRender()})
     .on("postgres_changes",{event:"*",schema:"public",table:"plans"},p=>{
       if(p.eventType==="DELETE"){const oid=p.old&&p.old.id;plans.delete(oid);fillPlanSel();if(isOv()){[...tasks].forEach(([k,t])=>{if(t.planId===oid)tasks.delete(k)});scheduleRender();return}if(oid===planId){setSave("Planen togs bort av en annan användare.",true);const nxt=[...plans.keys()][0];nxt?openPlan(nxt):createPlan("Ny tidsplan").then(openPlan)}return}
-      const r=p.new;plans.set(r.id,r);fillPlanSel();if(isOv())scheduleRender();if(r.id===planId&&document.activeElement!==$("planTitle"))$("planTitle").value=r.title})
+      const r=p.new;plans.set(r.id,r);fillPlanSel();presRender();if(isOv())scheduleRender();if(r.id===planId&&document.activeElement!==$("planTitle"))$("planTitle").value=r.title})
     .subscribe(st=>{if(st==="SUBSCRIBED")liveState(true,"Live");else if(st==="CHANNEL_ERROR"||st==="TIMED_OUT")liveState(false,"Frånkopplad – försöker igen");else if(st==="CLOSED")liveState(false,"Frånkopplad")});
 }
 function onRow(p){const r=p.new;if(!r||(!isOv()&&r.plan_id!==planId)||timers.has(r.id)||dragging&&dragging.id===r.id)return;const cur=tasks.get(r.id);const nt=fromRow(r);
@@ -1030,7 +1058,7 @@ async function startApp(session){
   if(error){showAuth("login","Kunde inte kontrollera behörighet: "+error.message);return}
   if(!ok){showAuth("denied");return}
   $("auth").hidden=true;started=true;
-  await loadMembers();
+  await loadMembers();startPresence();
   try{await loadPlans()}catch(e){setSave(sbErr(e),true);return}
   let id=null;try{id=localStorage.getItem("tidsplan-plan")}catch(e){}
   if(!id||(!plans.has(id)&&id!==OV))id=[...plans.keys()][0];
