@@ -865,7 +865,12 @@ const aToggleDefault=async()=>{if(authMode==="denied"){await sb.auth.signOut();l
 $("aToggle").onclick=aToggleDefault;
 $("fLogin").onsubmit=async e=>{e.preventDefault();$("aLoginBtn").disabled=true;$("aMsg").textContent="Loggar in…";$("aMsg").className="amsg";
   const {data,error}=await sb.auth.signInWithPassword({email:$("aEmail").value.trim(),password:$("aPw").value});$("aLoginBtn").disabled=false;
-  if(error){showAuth("login",/invalid/i.test(error.message)?"Fel e-post eller lösenord.":/confirm/i.test(error.message)?"Kontot är inte bekräftat ännu – använd länken i inbjudan.":error.message);return}
+  if(error){const m=error.message||"";showAuth("login",
+    /invalid login credentials/i.test(m)?"Fel e-post eller lösenord. (Supabase: "+m+")":
+    /api ?key|apikey|jwt|unauthorized|401/i.test(m+" "+(error.status||""))?"Supabase godkänner inte nyckeln i config.js. Kontrollera att du kopierat hela Publishable- eller anon-nyckeln och att URL:en hör till samma projekt. (Supabase: "+m+")":
+    /confirm/i.test(m)?"Kontot är inte bekräftat ännu – använd länken i inbjudan.":
+    /fetch|network/i.test(m)?"Når inte Supabase – kontrollera URL:en i config.js. (Fel: "+m+")":
+    "Inloggningen misslyckades. Supabase svarade: "+m+(error.status?" (kod "+error.status+")":""));return}
   $("aPw").value="";startApp(data.session)};
 $("fReset").onsubmit=async e=>{e.preventDefault();const {error}=await sb.auth.resetPasswordForEmail($("rEmail").value.trim(),{redirectTo:location.origin+location.pathname});
   showAuth("reset",error?error.message:"Om adressen finns skickas en länk inom någon minut. Kolla även skräpposten.",!error)};
