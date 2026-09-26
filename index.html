@@ -232,6 +232,7 @@ button,input,textarea{font:inherit;color:inherit}
   </div>
   <div class="tools">
     <button class="btn primary" id="btnProj">+ Nytt projekt</button>
+    <button class="btn" id="btnTpl">+ Apparatskåp (mall)</button>
     <button class="btn" id="btnAdd">+ Nytt moment</button>
     <button class="btn" id="btnFold">Fäll ihop alla</button>
     <button class="btn" id="btnToday">Idag</button>
@@ -283,6 +284,15 @@ button,input,textarea{font:inherit;color:inherit}
   <p id="iMsg"></p>
   <ul id="iList"></ul>
   <div class="prow"><button class="btn" id="iCancel">Avbryt</button><span style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="iAdd">Lägg till i planen</button><button class="btn primary" id="iReplace">Ersätt planen</button></span></div>
+</div>
+<div class="scrim" id="tScrim" hidden></div>
+<div class="idlg" id="tDlg" hidden role="dialog" aria-modal="true" aria-labelledby="tHead">
+  <h2 id="tHead">Nytt apparatskåp från mall</h2>
+  <p>Skapar skåpet med momenten Driftkort, Elschema, Programmering och Driftsättning, 3 arbetsdagar vardera efter varandra. Helger och röda dagar hoppas över.</p>
+  <div class="field"><label for="tName">Apparatskåp</label><input id="tName" autocomplete="off" placeholder="t.ex. AS1"></div>
+  <div class="field"><label for="tStart">Startdatum</label><input id="tStart" type="date"></div>
+  <p class="notice" id="tPreview"></p>
+  <div class="prow"><button class="btn" id="tCancel">Avbryt</button><button class="btn primary" id="tCreate">Skapa</button></div>
 </div>
 <div class="tip" id="tip" hidden></div>
 
@@ -469,7 +479,7 @@ function render(){
   $("stN").textContent=nTask;$("stH").textContent=String(Math.round(tot*10)/10).replace(".",",");
   if(isOv()){$("btnFold").hidden=!plans.size;$("btnFold").textContent=[...plans.keys()].some(k=>!ovCollapsed.has(k))?"Fäll ihop alla planer":"Fäll ut alla planer"}
   else{const ps=[...tasks].filter(([,t])=>t.kind==="project");$("btnFold").hidden=!ps.length;$("btnFold").textContent=ps.some(([,t])=>!t.collapsed)?"Fäll ihop alla":"Fäll ut alla"}
-  ["btnProj","btnAdd","btnImport","btnDelPlan","btnSaveJson"].forEach(b=>{const e=$(b);if(e)e.hidden=isOv()});$("planTitle").readOnly=isOv();
+  ["btnProj","btnTpl","btnAdd","btnImport","btnDelPlan","btnSaveJson"].forEach(b=>{const e=$(b);if(e)e.hidden=isOv()});$("planTitle").readOnly=isOv();
   $("stSpan").textContent=isFinite(mn)?`${fd(mn)} – ${fd(mx)} (${workdays(mn,mx)} dgr)`:"–";
   $("gwrap").scrollLeft=sl;
   if(openId)fillPanelSummary();
@@ -839,6 +849,28 @@ $("btnCsv").onclick=async()=>{
   catch(e){if(e&&e.code!=="declined")setSave("Exporten avbröts.",true)}
 };
 
+// ---------- mall: apparatskåp ----------
+const TPL=[["Driftkort","Turkos"],["Elschema","Orange"],["Programmering","Blå"],["Driftsättning","Grön"]],TPL_DAYS=3;
+const nextWorkday=n=>{while(!isWorkday(n))n++;return n};
+function tplPlan(start){let n=nextWorkday(start);return TPL.map(([name,color])=>{const s=n;let c=1,e=n;while(c<TPL_DAYS){e++;if(isWorkday(e))c++}n=nextWorkday(e+1);return {name,color,s,e}})}
+function tplSuggestName(){const nums=[...tasks.values()].filter(t=>t.kind==="project").map(t=>(t.name.match(/^AS\s*(\d+)/i)||[])[1]).filter(Boolean).map(Number);return "AS"+((nums.length?Math.max(...nums):0)+1)}
+function tplPreview(){const v=$("tStart").value;if(!v){$("tPreview").textContent="";return}const p=tplPlan(pd(v));$("tPreview").textContent=p.map(x=>`${x.name} ${fd(x.s).slice(5)}–${fd(x.e).slice(5)}`).join(" · ")}
+function tplOpen(){
+  const last=[...tasks.values()].filter(t=>t.kind!=="project").reduce((m,t)=>Math.max(m,...t.segs.map(x=>x[1]+1)),TODAY);
+  $("tName").value=tplSuggestName();$("tStart").value=fd(nextWorkday(Math.max(TODAY,last)));tplPreview();
+  $("tDlg").hidden=false;$("tScrim").hidden=false;setTimeout(()=>{$("tName").focus();$("tName").select()},30);
+}
+function tplClose(){$("tDlg").hidden=true;$("tScrim").hidden=true}
+$("btnTpl").onclick=tplOpen;$("tCancel").onclick=tplClose;$("tScrim").onclick=tplClose;$("tStart").oninput=tplPreview;
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("tDlg").hidden)tplClose();if(e.key==="Enter"&&!$("tDlg").hidden&&e.target.id==="tName")$("tCreate").click()});
+$("tCreate").onclick=()=>{
+  const name=$("tName").value.trim()||tplSuggestName();const v=$("tStart").value;if(!v){$("tStart").focus();return}
+  const now=Date.now(),pid=newId();
+  tasks.set(pid,{planId,kind:"project",parent:"",collapsed:false,name,color:"Blå",hours:0,note:"",created:now,segs:[]});persist(pid);
+  tplPlan(pd(v)).forEach((x,i)=>{const id=newId();tasks.set(id,{planId,kind:"task",parent:pid,collapsed:false,name:x.name,color:x.color,hours:0,note:"",created:now+1+i,segs:[[x.s,x.e]]});persist(id)});
+  tplClose();render();setSave(`${name} skapat med ${TPL.length} moment.`);
+  const el2=gw.querySelector(`.psum[data-id="${pid}"]`);if(el2)gw.scrollLeft=Math.max(0,parseFloat(el2.style.left)-DW*5);
+};
 // ---------- planer ----------
 function saveOv(){try{localStorage.setItem("tidsplan-ov",JSON.stringify([...ovCollapsed]))}catch(e){}}
 function fillPlanSel(){const sel=$("planSel");sel.innerHTML="";{const o=el("option",null,"Översikt – alla planer");o.value=OV;sel.append(o)}[...plans.values()].sort((a,b)=>a.title.localeCompare(b.title,"sv")).forEach(p=>{const o=el("option",null,p.title);o.value=p.id;sel.append(o)});if(planId)sel.value=planId}
