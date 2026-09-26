@@ -122,6 +122,17 @@ button,input,textarea{font:inherit;color:inherit}
 .row.plan .lname .nm{font-size:15px}
 .psum.fixed{cursor:default}
 .ovnote{font-size:12px;color:var(--muted)}
+.who{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:18px;padding:0 5px;border-radius:9px;background:var(--surface);border:1px solid var(--line2);font-size:10px;font-weight:700;letter-spacing:.02em;color:var(--ink)}
+.who.me{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.lname .who{margin-left:2px}
+.btn[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.mlist{display:flex;flex-direction:column;gap:8px;max-height:320px;overflow:auto}
+.mrow{display:grid;grid-template-columns:30px 1fr;gap:8px;align-items:center}
+.mrow input{border:1px solid var(--line2);background:var(--surface2);border-radius:5px;padding:6px 8px;width:100%}
+.mrow small{grid-column:2;color:var(--muted);font-size:11.5px;margin-top:-4px}
+.steps{margin:0;padding-left:20px;line-height:1.5;font-size:13.5px}
+.steps li{margin-bottom:4px}
+.urlrow{display:flex;gap:8px}.urlrow input{flex:1;min-width:0;font-family:var(--mono);font-size:12px;border:1px solid var(--line2);background:var(--surface2);border-radius:5px;padding:7px 8px}
 .pcell{display:flex;align-items:center;height:100%;min-width:0}
 .tog{flex:0 0 26px;height:100%;border:0;background:none;cursor:pointer;color:var(--muted);font-size:12px;padding:0}
 .tog:hover{color:var(--ink)}
@@ -219,7 +230,7 @@ button,input,textarea{font:inherit;color:inherit}
   <button class="btn" id="btnNewPlan">+ Ny plan</button>
   <button class="btn danger" id="btnDelPlan">Ta bort plan</button>
   <button class="fschip" id="liveChip" type="button" title="Anslutning för realtidsuppdateringar"><span id="liveTxt">Ansluter…</span></button>
-  <div class="userbox"><span id="userEmail"></span><button class="btn" id="btnPw">Byt lösenord</button><button class="btn" id="btnLogout">Logga ut</button></div>
+  <div class="userbox"><span id="userEmail"></span><button class="btn" id="btnPeople">Resurser</button><button class="btn" id="btnCal">Min kalender</button><button class="btn" id="btnPw">Byt lösenord</button><button class="btn" id="btnLogout">Logga ut</button></div>
 </div>
 <div class="top">
   <div class="titlebox">
@@ -235,6 +246,7 @@ button,input,textarea{font:inherit;color:inherit}
     <button class="btn primary" id="btnProj">+ Nytt projekt</button>
     <button class="btn" id="btnTpl">+ Apparatskåp (mall)</button>
     <button class="btn" id="btnAdd">+ Nytt moment</button>
+    <button class="btn" id="btnMine" aria-pressed="false" title="Visa bara moment där du är resurs">Bara mina</button>
     <button class="btn" id="btnFold">Fäll ihop alla</button>
     <button class="btn" id="btnToday">Idag</button>
     <div class="zoom" role="group" aria-label="Zoom">
@@ -271,6 +283,7 @@ button,input,textarea{font:inherit;color:inherit}
   <div class="prow"><h2 id="pHead">Redigera moment</h2><button class="btn" id="pClose">Stäng</button></div>
   <div class="field"><label for="fName" id="fNameLbl">Moment</label><input id="fName" autocomplete="off"></div>
   <div class="field"><label>Färg</label><div class="swatches" id="fColors" role="radiogroup" aria-label="Färg"></div></div>
+  <div class="field" id="fWhoBox"><label for="fWho">Resurs</label><select id="fWho"></select></div>
   <div class="field" id="fParentBox"><label for="fParent">Projekt</label><select id="fParent"></select></div>
   <div class="field" id="fChildBox" hidden><label>Undermoment</label><div class="notice" id="fChildInfo"></div><div><button class="btn" id="fAddChild">+ Lägg till undermoment</button></div></div>
   <div class="field" id="fHoursBox"><label for="fHours">Timmar</label><input id="fHours" type="number" min="0" step="0.5" inputmode="decimal"></div>
@@ -294,6 +307,26 @@ button,input,textarea{font:inherit;color:inherit}
   <div class="field"><label for="tStart">Startdatum</label><input id="tStart" type="date"></div>
   <p class="notice" id="tPreview"></p>
   <div class="prow"><button class="btn" id="tCancel">Avbryt</button><button class="btn primary" id="tCreate">Skapa</button></div>
+</div>
+<div class="scrim" id="xScrim" hidden></div>
+<div class="idlg" id="calDlg" hidden role="dialog" aria-modal="true" aria-labelledby="calHead">
+  <h2 id="calHead">Min kalender i Outlook</h2>
+  <p>Prenumerera på de moment där du är resurs. Outlook hämtar ändringar själv – nya, flyttade och borttagna moment uppdateras automatiskt.</p>
+  <div class="field"><label for="calUrl">Din personliga kalenderlänk</label><div class="urlrow"><input id="calUrl" readonly value="Hämtar…"><button class="btn primary" id="calCopy">Kopiera</button></div></div>
+  <ol class="steps">
+    <li><b>Outlook på webben / nya Outlook:</b> Kalender → <i>Lägg till kalender</i> → <i>Prenumerera från webben</i> → klistra in länken → ge den namnet <i>Tidsplan</i> → <i>Importera</i>.</li>
+    <li><b>Klassiska Outlook:</b> Kalender → <i>Lägg till kalender</i> → <i>Från Internet…</i> → klistra in länken → OK → Ja.</li>
+  </ol>
+  <p class="notice">Länken är personlig och hemlig – den som har den kan se dina moment. Uppdateringar kan ta några timmar att synas i Outlook på webben.</p>
+  <p class="notice" id="calMsg"></p>
+  <div class="prow"><button class="btn danger" id="calReset">Skapa ny länk</button><button class="btn" id="calClose">Stäng</button></div>
+</div>
+<div class="idlg" id="pplDlg" hidden role="dialog" aria-modal="true" aria-labelledby="pplHead">
+  <h2 id="pplHead">Resurser</h2>
+  <p>Alla som har tillgång till tidsplanen. Skriv ett namn – initialerna visas bredvid momenten.</p>
+  <div class="mlist" id="pplList"></div>
+  <p class="notice">Nya personer läggs till i Supabase (allowed_emails + Authentication → Users).</p>
+  <div class="prow"><span></span><button class="btn" id="pplClose">Stäng</button></div>
 </div>
 <div class="tip" id="tip" hidden></div>
 
@@ -348,9 +381,9 @@ const FS={dead:new Map(),titleMod:0}; // behålls för kompatibilitet med import
 function lsSave(){}
 function lsLoad(){return false}
 const chains=new Map();
-const toRow=(id,t)=>({id,plan_id:t.planId||planId,kind:t.kind||"task",parent:t.parent||null,name:t.name,color:t.color,hours:t.hours||0,note:t.note||"",collapsed:!!t.collapsed,
+const toRow=(id,t)=>({assignee:t.assignee||null,id,plan_id:t.planId||planId,kind:t.kind||"task",parent:t.parent||null,name:t.name,color:t.color,hours:t.hours||0,note:t.note||"",collapsed:!!t.collapsed,
   segs:t.segs.map(([s,e])=>({s:fd(s),e:fd(e)})),created:Math.round(t.created||0)});
-const fromRow=r=>({planId:r.plan_id,mod:Date.parse(r.updated_at)||0,who:r.updated_email||"",at:r.updated_at||"",kind:r.kind==="project"?"project":"task",parent:r.parent||"",collapsed:!!r.collapsed,
+const fromRow=r=>({assignee:(r.assignee||"").toLowerCase(),planId:r.plan_id,mod:Date.parse(r.updated_at)||0,who:r.updated_email||"",at:r.updated_at||"",kind:r.kind==="project"?"project":"task",parent:r.parent||"",collapsed:!!r.collapsed,
   name:r.name||"",color:CMAP[r.color]?r.color:"Blå",hours:Number(r.hours)||0,note:r.note||"",created:Number(r.created)||0,
   segs:(Array.isArray(r.segs)?r.segs:[]).filter(p=>p&&p.s&&p.e).map(p=>[pd(p.s),pd(p.e)])});
 function sbErr(e){const m=(e&&(e.message||e.error_description))||"";return /JWT|expired|401/i.test(m)?"Inloggningen har gått ut – logga in igen.":/fetch|network|Failed/i.test(m)?"Ingen anslutning – ändringen sparas när du är uppkopplad igen.":"Kunde inte spara: "+m}
@@ -395,7 +428,16 @@ function spanOf(id){const t=T(id);if(!t)return null;let mn=Infinity,mx=-Infinity
   const segs=t.kind==="plan"?planTasks(t.pid).flatMap(([,c])=>c.segs):t.kind==="project"?kids(id).flatMap(([,c])=>c.segs):t.segs;segs.forEach(([a,b])=>{mn=Math.min(mn,a);mx=Math.max(mx,b)});return isFinite(mn)?[mn,mx]:null}
 function hoursOf(id){const t=T(id);if(t.kind==="plan")return planTasks(t.pid).reduce((a,[,c])=>a+(c.hours||0),0);return t.kind==="project"?kids(id).reduce((a,[,c])=>a+(c.hours||0),0):(t.hours||0)}
 function wdOf(id){const t=T(id);if(t.kind==="project"||t.kind==="plan"){const sp=spanOf(id);return sp?workdays(sp[0],sp[1]):0}return t.segs.reduce((a,[s,e])=>a+workdays(s,e),0)}
-function displayList(all){ // [{id,t,level}] – projekt följt av sina undermoment
+// ---------- resurser ----------
+let members=new Map(),resOK=false,mineOnly=false,SB_ORIGIN="";try{mineOnly=localStorage.getItem("tidsplan-mine")==="1"}catch(e){}
+const myEmail=()=>(me&&me.email||"").toLowerCase();
+const personName=e=>{e=(e||"").toLowerCase();return members.get(e)||e.split("@")[0].replace(/[._-]+/g," ").replace(/\b\w/g,c=>c.toUpperCase())};
+const initials=e=>{const n=personName(e).trim().split(/\s+/);return ((n[0]||"")[0]||"").toUpperCase()+((n[1]||"")[0]||"").toUpperCase()};
+function whoBadge(e){const b=el("span","who"+(e===myEmail()?" me":""),initials(e));b.title=personName(e);return b}
+function displayList(all){const out=displayListRaw(all);if(!mineOnly)return out;const me2=myEmail();
+  const mine=([,t])=>t.kind==="task"&&t.assignee===me2;
+  return out.filter(({id,t})=>t.kind==="task"?t.assignee===me2:t.kind==="plan"?planTasks(t.pid).some(mine):kids(id).some(mine))}
+function displayListRaw(all){ // [{id,t,level}] – projekt följt av sina undermoment
   const byStart=(a,b)=>{const sa=spanOf(a[0]),sb=spanOf(b[0]);return (sa?sa[0]:1e9)-(sb?sb[0]:1e9)||a[1].created-b[1].created};
   if(isOv()){
     vplans=new Map([...plans.values()].map(p=>["plan:"+p.id,{kind:"plan",pid:p.id,name:p.title,color:"Plan",collapsed:ovCollapsed.has(p.id),segs:[],created:0,note:""}]));
@@ -446,6 +488,7 @@ function render(){
     const dot=el("span","dot");dot.style.background=CMAP[t.color];
     nb.append(dot,el("span","nm",t.name));
     if(PL)nb.append(el("span","parts",String(planTasks(t.pid).length)));else if(P)nb.append(el("span","parts",String(kids(id).length)));else if(t.segs.length>1)nb.append(el("span","parts","×"+t.segs.length));
+    if(!P&&t.assignee)nb.append(whoBadge(t.assignee));
     c0.append(nb);
     if(P&&!PL){const ab=el("button","addc","+");ab.setAttribute("aria-label","Lägg till undermoment i "+t.name);ab.type="button";ab.dataset.addchild=id;ab.title="Lägg till undermoment";c0.append(ab)}
     const h=hoursOf(id);
@@ -465,7 +508,7 @@ function render(){
         tr.append(segEl(id,t,k,i===0));lastIdx=Math.max(lastIdx??-1e9,toIdx(p[1],false));
       });
     }
-    if(lastIdx!=null){const lb=el("div","lbl"+(P?" pl":""));lb.style.left=(lastIdx+1)*DW+6+"px";lb.append(document.createTextNode(t.name));if(h)lb.append(el("small",null,String(Math.round(h*10)/10).replace(".",",")+" h"));tr.append(lb)}
+    if(lastIdx!=null){const lb=el("div","lbl"+(P?" pl":""));lb.style.left=(lastIdx+1)*DW+6+"px";if(!P&&t.assignee)lb.append(whoBadge(t.assignee));lb.append(document.createTextNode(t.name));if(h)lb.append(el("small",null,String(Math.round(h*10)/10).replace(".",",")+" h"));tr.append(lb)}
     row.append(lc,tr);body.append(row);
   });
   // tom rad för nytt moment
@@ -480,6 +523,7 @@ function render(){
   $("stN").textContent=nTask;$("stH").textContent=String(Math.round(tot*10)/10).replace(".",",");
   if(isOv()){$("btnFold").hidden=!plans.size;$("btnFold").textContent=[...plans.keys()].some(k=>!ovCollapsed.has(k))?"Fäll ihop alla planer":"Fäll ut alla planer"}
   else{const ps=[...tasks].filter(([,t])=>t.kind==="project");$("btnFold").hidden=!ps.length;$("btnFold").textContent=ps.some(([,t])=>!t.collapsed)?"Fäll ihop alla":"Fäll ut alla"}
+  $("btnMine").setAttribute("aria-pressed",String(mineOnly));$("btnMine").hidden=!resOK;
   ["btnProj","btnTpl","btnAdd","btnImport","btnDelPlan","btnSaveJson"].forEach(b=>{const e=$(b);if(e)e.hidden=isOv()});$("planTitle").readOnly=isOv();
   $("stSpan").textContent=isFinite(mn)?`${fd(mn)} – ${fd(mx)} (${workdays(mn,mx)} dgr)`:"–";
   $("gwrap").scrollLeft=sl;
@@ -510,7 +554,7 @@ gw.addEventListener("pointerdown",ev=>{
   dragging.tr=dragging.tr||tr;dragging.pid=ev.pointerId;
 });
 gw.addEventListener("pointermove",ev=>{
-  if(!dragging){const pp=ev.target.closest&&ev.target.closest(".psum");if(pp){const t=T(pp.dataset.id),sp=spanOf(pp.dataset.id);showTip(ev.clientX,ev.clientY,`${t.name} · ${fd(sp[0])} – ${fd(sp[1])} · ${kids(pp.dataset.id).length} undermoment`);return}
+  if(!dragging){const pp=ev.target.closest&&ev.target.closest(".psum");if(pp){const t=T(pp.dataset.id),sp=spanOf(pp.dataset.id);showTip(ev.clientX,ev.clientY,`${t.name}${t.assignee?" ("+personName(t.assignee)+")":""} · ${fd(sp[0])} – ${fd(sp[1])} · ${kids(pp.dataset.id).length} undermoment`);return}
     const s=ev.target.closest&&ev.target.closest(".seg");if(s){const t=tasks.get(s.dataset.id),[a,b]=t.segs[+s.dataset.k];showTip(ev.clientX,ev.clientY,`${t.name} · ${fd(a)} → ${fd(b)} · ${workdays(a,b)} arb.dgr`)}else tip.hidden=true;return}
   const dx=ev.clientX-dragging.x0;if(!dragging.moved&&Math.abs(dx)>4){dragging.moved=true;try{dragging.tr.setPointerCapture(dragging.pid)}catch(e){}}if(!dragging.moved)return;
   const dc=Math.round(dx/DW);const d=dragging;
@@ -599,7 +643,10 @@ function openPanel(id,focusName){
   const P=t.kind==="project";
   $("fName").value=t.name;$("fHours").value=t.hours||"";$("fNote").value=t.note;
   $("pHead").textContent=P?"Redigera projekt":"Redigera moment";$("fNameLbl").textContent=P?"Projekt":"Moment";
-  $("fHoursBox").hidden=P;$("fPeriodsBox").hidden=P;$("fParentBox").hidden=P;$("fChildBox").hidden=!P;
+  $("fHoursBox").hidden=P;$("fPeriodsBox").hidden=P;$("fParentBox").hidden=P;$("fWhoBox").hidden=P||!resOK;
+  if(!P&&resOK){const ws=$("fWho");ws.innerHTML="";const o0=el("option",null,"Ingen resurs");o0.value="";ws.append(o0);
+    [...members.keys()].sort((a,b)=>personName(a).localeCompare(personName(b),"sv")).forEach(e=>{const o=el("option",null,personName(e)+(e===myEmail()?" (jag)":""));o.value=e;ws.append(o)});
+    if(t.assignee&&!members.has(t.assignee)){const o=el("option",null,t.assignee);o.value=t.assignee;ws.append(o)}ws.value=t.assignee||""}$("fChildBox").hidden=!P;
   if(!P){const sel=$("fParent");sel.innerHTML="";const o0=el("option",null,"Inget projekt");o0.value="";sel.append(o0);
     [...tasks].filter(([,x])=>x.kind==="project"&&(!isOv()||x.planId===t.planId)).sort((a,b)=>a[1].name.localeCompare(b[1].name,"sv")).forEach(([pid,p])=>{const o=el("option",null,p.name);o.value=pid;sel.append(o)});
     sel.value=isProj(t.parent)?t.parent:""}
@@ -627,6 +674,7 @@ function fillPanelSummary(){const t=tasks.get(openId);if(!t){closePanel();return
 function closePanel(){openId=null;$("panel").hidden=true;$("scrim").hidden=true}
 $("pClose").onclick=closePanel;$("scrim").onclick=closePanel;
 document.addEventListener("keydown",e=>{if(e.key==="Escape"&&openId)closePanel()});
+$("fWho").onchange=()=>{const t=tasks.get(openId);if(!t)return;t.assignee=$("fWho").value;persistSoon(openId);render()};
 $("fParent").onchange=()=>{const t=tasks.get(openId);if(!t)return;t.parent=$("fParent").value;const p=tasks.get(t.parent);if(p&&p.collapsed){p.collapsed=false;persistSoon(t.parent)}persistSoon(openId);render()};
 $("fAddChild").onclick=()=>{const pid=openId;closePanel();addChild(pid)};
 $("fName").oninput=()=>{const t=tasks.get(openId);t.name=$("fName").value||(t.kind==="project"?"Namnlöst projekt":"Namnlöst moment");persistSoon(openId);render()};
@@ -639,6 +687,7 @@ let armT;$("fDelete").onclick=()=>{const b=$("fDelete");const P=isProj(openId);c
 
 // ---------- toolbar ----------
 $("btnAdd").onclick=openNew;$("btnProj").onclick=newProject;
+$("btnMine").onclick=()=>{mineOnly=!mineOnly;try{localStorage.setItem("tidsplan-mine",mineOnly?"1":"0")}catch(e){}render();setSave(mineOnly?"Visar bara moment där du är resurs.":"Visar alla moment.")};
 $("btnFold").onclick=()=>{if(isOv()){const anyOpen=[...plans.keys()].some(k=>!ovCollapsed.has(k));ovCollapsed=new Set(anyOpen?[...plans.keys()]:[]);saveOv();render();return}const ps=[...tasks].filter(([,t])=>t.kind==="project");const anyOpen=ps.some(([,t])=>!t.collapsed);ps.forEach(([id,t])=>{if(t.collapsed!==anyOpen){t.collapsed=anyOpen;persistSoon(id)}});render()};
 $("btnToday").onclick=()=>{gw.scrollLeft=Math.max(0,toIdx(TODAY,true)*DW-DW*10)};
 ["z1","z2","z3"].forEach(z=>$(z).onclick=()=>{const c=gw.scrollLeft/DW;DW=+$(z).dataset.dw;["z1","z2","z3"].forEach(q=>$(q).setAttribute("aria-pressed",String(q===z)));render();gw.scrollLeft=c*DW});
@@ -646,14 +695,14 @@ let titleT;$("planTitle").oninput=()=>{clearTimeout(titleT);titleT=setTimeout(as
   const p=plans.get(planId);if(p)p.title=title;fillPlanSel();const {error}=await sb.from("plans").update({title}).eq("id",planId);if(error)setSave(sbErr(error),true);else setSave("Sparat "+hhmm())},600)};
 function csv(){
   const list=displayList(true);const maxP=Math.max(1,...list.map(({t})=>t.segs.length));
-  const head=["Nr","Typ","Projekt","Moment"];for(let i=1;i<=maxP;i++)head.push(i===1?"Start":"Start "+i,i===1?"Stopp":"Stopp "+i);head.push("Arbetsdagar","Timmar","Färg","Kommentar");
+  const head=["Nr","Typ","Projekt","Moment"];for(let i=1;i<=maxP;i++)head.push(i===1?"Start":"Start "+i,i===1?"Stopp":"Stopp "+i);head.push("Arbetsdagar","Timmar","Färg","Kommentar","Resurs");
   const q=v=>{v=String(v??"");return /[;"\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
   const rows=[head.map(q).join(";")];
   list.forEach(({id,t,level},i)=>{const P=t.kind==="project"||t.kind==="plan";const sp=spanOf(id);
     const pn=t.parent&&tasks.get(t.parent)?tasks.get(t.parent).name:"";
     const r=[i+1,t.kind==="plan"?"Plan":t.kind==="project"?"Projekt":pn?"Undermoment":"Moment",pn,t.name];
     for(let k=0;k<maxP;k++){if(P){r.push(k===0&&sp?fd(sp[0]):"",k===0&&sp?fd(sp[1]):"");continue}const p=t.segs[k];r.push(p?fd(p[0]):"",p?fd(p[1]):"")}
-    const h=hoursOf(id);r.push(wdOf(id),h?String(h).replace(".",","):"",t.color,t.note);rows.push(r.map(q).join(";"))});
+    const h=hoursOf(id);r.push(wdOf(id),h?String(h).replace(".",","):"",t.color,t.note,t.kind==="task"&&t.assignee?t.assignee:"");rows.push(r.map(q).join(";"))});
   return "\ufeff"+rows.join("\r\n");
 }
 function fileDownload(name,data,type){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([data],{type}));a.download=name;document.body.append(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000)}
@@ -688,7 +737,7 @@ function rowsToTasks(rows){
   const hi=rows.findIndex(r=>r.some(c=>norm(c)==="moment"));
   if(hi<0)throw new Error("Hittar ingen kolumn som heter Moment.");
   const H=rows[hi].map(norm);const col=n=>H.indexOf(n);
-  const cName=col("moment"),cTyp=col("typ"),cProj=col("projekt"),cH=col("timmar"),cC=col("färg")>=0?col("färg"):col("farg"),cN=col("kommentar");
+  const cWho=col("resurs"),cName=col("moment"),cTyp=col("typ"),cProj=col("projekt"),cH=col("timmar"),cC=col("färg")>=0?col("färg"):col("farg"),cN=col("kommentar");
   const pairs=[];for(let k=1;k<=10;k++){const sN=k===1?"start":"start "+k,eN=k===1?"stopp":"stopp "+k;
     const si=H.indexOf(sN),ei=H.indexOf(eN)>=0?H.indexOf(eN):H.indexOf(k===1?"slut":"slut "+k);if(si>=0)pairs.push([si,ei])}
   if(!pairs.length)throw new Error("Hittar ingen kolumn som heter Start.");
@@ -702,7 +751,8 @@ function rowsToTasks(rows){
     const segs=[];pairs.forEach(([si,ei])=>{const s=parseDate(r[si]);if(s==null)return;const e=ei>=0?parseDate(r[ei]):null;segs.push([s,e==null?s:e])});
     if(!segs.length){skipped.push(name);return}
     const colr=String(r[cC]??"").trim();const cn=COLORS.find(([n])=>n.toLowerCase()===colr.toLowerCase());
-    const t={kind:"task",parent:"",collapsed:false,_proj:proj,name,color:cn?cn[0]:"Blå",hours:Math.max(0,parseFloat(String(r[cH]??"").replace(",",".").replace(/\s/g,""))||0),note:String(cN>=0?r[cN]??"":""),created:Date.now()+i,segs};
+    const wv=cWho>=0?String(r[cWho]??"").trim().toLowerCase():"";const assignee=!wv?"":wv.includes("@")?wv:([...members].find(([,n])=>(n||"").toLowerCase()===wv)||[""])[0];
+    const t={assignee,kind:"task",parent:"",collapsed:false,_proj:proj,name,color:cn?cn[0]:"Blå",hours:Math.max(0,parseFloat(String(r[cH]??"").replace(",",".").replace(/\s/g,""))||0),note:String(cN>=0?r[cN]??"":""),created:Date.now()+i,segs};
     normalize(t);out.push(t);
   });
   return {out,skipped};
@@ -827,7 +877,7 @@ async function exportPdf(){
       }
       // text bredvid stapeln (till vänster om den inte får plats till höger)
       doc.setFontSize(FS-1);doc.setFont("helvetica",P?"bold":"normal");doc.setTextColor(26,34,44);
-      const label=t.name+(h?`  ${String(Math.round(h*10)/10).replace(".",",")} h`:"");
+      const label=t.name+(!P&&t.assignee?` (${initials(t.assignee)})`:"")+(h?`  ${String(Math.round(h*10)/10).replace(".",",")} h`:"");
       const rx=TX+(lastB+1)*dw+1.2,room=PW-M-rx;const fa=pIdx(snapStart(S));
       if(doc.getTextWidth(label)<=room||room>=TX+fa*dw-TX)doc.text(trunc(label,Math.max(room,8)),rx,ty-.1);
       else doc.text(trunc(label,TX+fa*dw-TX-2),TX+fa*dw-1.2,ty-.1,{align:"right"});
@@ -871,6 +921,37 @@ $("tCreate").onclick=()=>{
   tplPlan(pd(v)).forEach((x,i)=>{const id=newId();tasks.set(id,{planId,kind:"task",parent:pid,collapsed:false,name:x.name,color:x.color,hours:0,note:"",created:now+1+i,segs:[[x.s,x.e]]});persist(id)});
   tplClose();render();setSave(`${name} skapat med ${TPL.length} moment.`);
   const el2=gw.querySelector(`.psum[data-id="${pid}"]`);if(el2)gw.scrollLeft=Math.max(0,parseFloat(el2.style.left)-DW*5);
+};
+// ---------- resurser och kalender ----------
+async function loadMembers(){
+  const {data,error}=await sb.rpc("list_members");
+  if(error){resOK=false;["btnPeople","btnCal","btnMine"].forEach(b=>$(b).hidden=true);console.warn("Resurser saknas – kör supabase_v2_resurser.sql",error);return}
+  resOK=true;members=new Map(data.map(m=>[m.email.toLowerCase(),m.display_name||""]));["btnPeople","btnCal"].forEach(b=>$(b).hidden=false);
+}
+function xOpen(id){$(id).hidden=false;$("xScrim").hidden=false}
+function xClose(){["calDlg","pplDlg"].forEach(i=>$(i).hidden=true);$("xScrim").hidden=true}
+$("xScrim").onclick=xClose;$("calClose").onclick=xClose;$("pplClose").onclick=()=>{xClose();render()};
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("xScrim").hidden)xClose()});
+const calLink=tok=>`${SB_ORIGIN}/functions/v1/calendar?token=${tok}`;
+$("btnCal").onclick=async()=>{xOpen("calDlg");$("calMsg").textContent="";$("calUrl").value="Hämtar…";
+  const {data,error}=await sb.rpc("get_calendar_token");
+  if(error){$("calUrl").value="";$("calMsg").textContent="Kunde inte hämta länken: "+error.message;return}
+  $("calUrl").value=calLink(data);const n=[...tasks.values()].filter(t=>t.kind==="task"&&t.assignee===myEmail()).length;
+  $("calMsg").textContent=isOv()?`Du är resurs på ${n} moment i alla planer.`:"";};
+$("calCopy").onclick=async()=>{const v=$("calUrl").value;try{await navigator.clipboard.writeText(v);$("calMsg").textContent="Länken är kopierad – klistra in den i Outlook."}catch(e){$("calUrl").select();$("calMsg").textContent="Markerad – tryck Ctrl+C för att kopiera."}};
+let calArm;$("calReset").onclick=async()=>{const b=$("calReset");
+  if(!b.classList.contains("armed")){b.classList.add("armed");b.textContent="Klicka igen – den gamla länken slutar fungera";clearTimeout(calArm);calArm=setTimeout(()=>{b.classList.remove("armed");b.textContent="Skapa ny länk"},4000);return}
+  b.classList.remove("armed");b.textContent="Skapa ny länk";
+  const {data,error}=await sb.rpc("reset_calendar_token");if(error){$("calMsg").textContent=error.message;return}
+  $("calUrl").value=calLink(data);$("calMsg").textContent="Ny länk skapad. Ta bort den gamla prenumerationen i Outlook och lägg till den nya.";};
+$("btnPeople").onclick=()=>{
+  const box=$("pplList");box.innerHTML="";
+  [...members.keys()].sort().forEach(e=>{
+    const ts=[...tasks.values()].filter(t=>t.kind==="task"&&t.assignee===e);const h=ts.reduce((a,t)=>a+(t.hours||0),0);
+    const row=el("div","mrow");const badge=whoBadge(e);const inp=el("input");inp.value=members.get(e)||"";inp.placeholder=personName(e);inp.setAttribute("aria-label","Namn för "+e);
+    inp.onchange=async()=>{const {error}=await sb.rpc("set_member_name",{p_email:e,p_name:inp.value});if(error){setSave(error.message,true);return}members.set(e,inp.value.trim());badge.textContent=initials(e);setSave("Namnet är sparat.")};
+    row.append(badge,inp,el("small",null,`${e} · ${ts.length} moment${h?" · "+String(Math.round(h*10)/10).replace(".",",")+" h":""}${isOv()?"":" i den här planen"}`));box.append(row)});
+  xOpen("pplDlg");
 };
 // ---------- planer ----------
 function saveOv(){try{localStorage.setItem("tidsplan-ov",JSON.stringify([...ovCollapsed]))}catch(e){}}
@@ -949,6 +1030,7 @@ async function startApp(session){
   if(error){showAuth("login","Kunde inte kontrollera behörighet: "+error.message);return}
   if(!ok){showAuth("denied");return}
   $("auth").hidden=true;started=true;
+  await loadMembers();
   try{await loadPlans()}catch(e){setSave(sbErr(e),true);return}
   let id=null;try{id=localStorage.getItem("tidsplan-plan")}catch(e){}
   if(!id||(!plans.has(id)&&id!==OV))id=[...plans.keys()][0];
@@ -960,7 +1042,7 @@ render();
   if(!CFG.url||!CFG.anonKey||/DITT-|DIN-/.test(CFG.url+CFG.anonKey)||!window.supabase){showAuth("config",window.supabase?"":"Supabase-biblioteket kunde inte laddas – kontrollera internetanslutningen.");return}
   const hashType=(location.hash.match(/type=(invite|recovery|signup|magiclink)/)||[])[1]||"";
   const hashErr=decodeURIComponent((location.hash.match(/error_description=([^&]+)/)||[])[1]||"").replace(/\+/g," ");
-  let sbUrl=String(CFG.url).trim();try{sbUrl=new URL(sbUrl).origin}catch(e){} // tål t.ex. /rest/v1 eller snedstreck i slutet
+  let sbUrl=String(CFG.url).trim();try{sbUrl=new URL(sbUrl).origin}catch(e){}SB_ORIGIN=sbUrl; // tål t.ex. /rest/v1 eller snedstreck i slutet
   sb=window.supabase.createClient(sbUrl,String(CFG.anonKey).trim(),{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true,flowType:"implicit"}});
   sb.auth.onAuthStateChange((ev)=>{if(ev==="PASSWORD_RECOVERY")showAuth("newpw");if(ev==="SIGNED_OUT"&&started)location.reload()});
   const {data:{session}}=await sb.auth.getSession();
