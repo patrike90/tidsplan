@@ -164,6 +164,7 @@ body.editing .gwrap{border-color:#2F7D3B;box-shadow:0 0 0 1px #2F7D3B}
 .pres{display:inline-flex;align-items:center;gap:5px;height:28px;padding:0 9px 0 7px;border:1px solid var(--line2);border-radius:999px;background:var(--surface);font-size:11.5px;font-weight:700;letter-spacing:.03em;color:var(--ink);cursor:default}
 .pres::before{content:"";width:8px;height:8px;border-radius:50%;background:#3F9A4A;box-shadow:0 0 0 2px color-mix(in srgb,#3F9A4A 25%,transparent)}
 .pres.me{border-color:var(--accent)}
+.pres.editing::before{background:#D0342C;box-shadow:0 0 0 2px color-mix(in srgb,#D0342C 25%,transparent)}
 .who{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:18px;padding:0 5px;border-radius:9px;background:var(--surface);border:1px solid var(--line2);font-size:10px;font-weight:700;letter-spacing:.02em;color:var(--ink)}
 .who.me{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 .lname .who{margin-left:2px}
@@ -1019,15 +1020,15 @@ $("btnPeople").onclick=()=>{
 };
 // ---------- inloggade just nu (presence) ----------
 let pchan=null;
-function presTrack(){if(pchan&&pchan._joined)pchan.track({email:myEmail(),plan:planId||"",at:Date.now()}).catch(()=>{})}
+function presTrack(){if(pchan&&pchan._joined)pchan.track({email:myEmail(),plan:planId||"",editing:typeof editMode!=="undefined"&&editMode,at:Date.now()}).catch(()=>{})}
 function presRender(){
   const box=$("online");box.innerHTML="";if(!pchan)return;
   const st=pchan.presenceState()||{};const seen=new Map();
   Object.values(st).forEach(arr=>(arr||[]).forEach(p=>{if(p&&p.email)seen.set(String(p.email).toLowerCase(),p)}));
   [...seen.keys()].sort((a,b)=>(a===myEmail())-(b===myEmail())||personName(a).localeCompare(personName(b),"sv")).forEach(e=>{
     const p=seen.get(e);const where=p.plan===OV?"översikten":(plans.get(p.plan)||{}).title||"";
-    const c=el("span","pres"+(e===myEmail()?" me":""),initials(e));
-    c.title=personName(e)+(e===myEmail()?" (du)":"")+" – inloggad"+(where?" · tittar på "+where:"");c.setAttribute("aria-label",c.title);box.append(c)});
+    const c=el("span","pres"+(e===myEmail()?" me":"")+(p.editing?" editing":""),initials(e));
+    c.title=personName(e)+(e===myEmail()?" (du)":"")+(p.editing?" – redigerar":" – inloggad")+(where?" · tittar på "+where:"");c.setAttribute("aria-label",c.title);box.append(c)});
 }
 function startPresence(){
   if(pchan)return;
@@ -1050,7 +1051,7 @@ function setEdit(on,msg){
   document.querySelectorAll("#pplList input").forEach(i=>i.disabled=!editMode);
   if(!$("panel").hidden)applyPanelRO();
   if(!$("bkDlg").hidden)$("bkList").querySelectorAll(".acts .btn:not(.danger),.acts select").forEach(x=>x.disabled=!editMode);
-  editTick();if(msg)setSave(msg);
+  editTick();if(msg)setSave(msg);presTrack();
 }
 function editTick(){const b=$("btnEdit");if(!editMode){b.textContent="Redigera";return}
   const rem=Math.max(0,EDIT_MS-(Date.now()-lastAct));
@@ -1102,7 +1103,7 @@ $("bkCreate").onclick=async()=>{const b=$("bkCreate");b.disabled=true;$("bkMsg")
   $("bkLabel").value="";$("bkMsg").textContent="Backup skapad.";bkLoad()};
 async function bkDaily(){const {error}=await sb.rpc("ensure_daily_backup");if(error&&/function|schema cache|PGRST202/i.test(error.message+(error.code||"")))$("btnBackup").hidden=true}
 // ---------- ny version ----------
-const APP_BUILD="20260928-102220";let nvSnooze=0,nvFound=false;
+const APP_BUILD="20260928-113948";let nvSnooze=0,nvFound=false;
 async function checkVersion(){
   if(nvFound&&Date.now()<nvSnooze)return;
   try{const r=await fetch(location.pathname+"?v="+Date.now(),{cache:"no-store"});if(!r.ok)return;const t=await r.text();
