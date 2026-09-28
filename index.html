@@ -122,6 +122,7 @@ button,input,textarea{font:inherit;color:inherit}
 .row.plan .lname .nm{font-size:15px}
 .psum.fixed{cursor:default}
 .ovnote{font-size:12px;color:var(--muted)}
+.appfoot{font-size:11px;color:var(--muted);text-align:center;letter-spacing:.02em;padding-top:2px;font-variant-numeric:tabular-nums}
 .newver{position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:60;display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:var(--ink);color:var(--bg);padding:10px 12px 10px 16px;border-radius:10px;box-shadow:var(--shadow);max-width:calc(100% - 32px);font-size:14px}
 .newver .btn{padding:6px 12px}
 .newver .btn.primary{background:#3F9A4A;border-color:#3F9A4A;color:#fff}
@@ -322,6 +323,7 @@ body.editing .gwrap{border-color:#2F7D3B;box-shadow:0 0 0 1px #2F7D3B}
   </div>
 </div>
 
+<footer class="appfoot">Made by: Clautrik · version <span id="appVer"></span></footer>
 <div class="scrim" id="scrim" hidden></div>
 <aside class="panel" id="panel" hidden aria-label="Redigera moment">
   <div class="prow"><h2 id="pHead">Redigera moment</h2><button class="btn" id="pClose">Stäng</button></div>
@@ -1100,7 +1102,7 @@ $("bkCreate").onclick=async()=>{const b=$("bkCreate");b.disabled=true;$("bkMsg")
   $("bkLabel").value="";$("bkMsg").textContent="Backup skapad.";bkLoad()};
 async function bkDaily(){const {error}=await sb.rpc("ensure_daily_backup");if(error&&/function|schema cache|PGRST202/i.test(error.message+(error.code||"")))$("btnBackup").hidden=true}
 // ---------- ny version ----------
-const APP_BUILD="20260928-101846";let nvSnooze=0,nvFound=false;
+const APP_BUILD="20260928-102220";let nvSnooze=0,nvFound=false;
 async function checkVersion(){
   if(nvFound&&Date.now()<nvSnooze)return;
   try{const r=await fetch(location.pathname+"?v="+Date.now(),{cache:"no-store"});if(!r.ok)return;const t=await r.text();
@@ -1110,6 +1112,7 @@ $("nvReload").onclick=async()=>{const b=$("nvReload");b.disabled=true;b.textCont
   timers.forEach((t,id)=>{clearTimeout(t);timers.delete(id);persist(id)});
   try{await Promise.race([Promise.all([...chains.values()]),new Promise(r=>setTimeout(r,4000))])}catch(e){}
   location.reload()};
+$("appVer").textContent=APP_BUILD.replace(/^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})\d{2}$/,"$1.$2.$3-$4$5");
 $("nvLater").onclick=()=>{$("newVer").hidden=true;nvSnooze=Date.now()+30*60*1000};
 setInterval(checkVersion,5*60*1000);
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")checkVersion()});
