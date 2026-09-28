@@ -122,6 +122,10 @@ button,input,textarea{font:inherit;color:inherit}
 .row.plan .lname .nm{font-size:15px}
 .psum.fixed{cursor:default}
 .ovnote{font-size:12px;color:var(--muted)}
+.newver{position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:60;display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:var(--ink);color:var(--bg);padding:10px 12px 10px 16px;border-radius:10px;box-shadow:var(--shadow);max-width:calc(100% - 32px);font-size:14px}
+.newver .btn{padding:6px 12px}
+.newver .btn.primary{background:#3F9A4A;border-color:#3F9A4A;color:#fff}
+.newver .btn.later{background:transparent;color:var(--bg);border-color:color-mix(in srgb,var(--bg) 40%,transparent)}
 .whopick{display:flex;flex-wrap:wrap;gap:6px}
 .whopick button{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line2);background:var(--surface2);border-radius:999px;padding:3px 10px 3px 3px;cursor:pointer;font:inherit;font-size:13px;color:var(--ink)}
 .whopick button[aria-pressed="true"]{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,var(--surface))}
@@ -377,6 +381,7 @@ body.editing .gwrap{border-color:#2F7D3B;box-shadow:0 0 0 1px #2F7D3B}
   <div class="bklist" id="bkList"></div>
   <p class="notice">En automatisk backup görs en gång per dygn när någon loggar in. Automatiska backuper sparas i 30 dagar, manuella tills du tar bort dem. Återställning kräver att <b>Redigera</b> är aktiverat.</p>
 </div>
+<div class="newver" id="newVer" hidden role="status"><span>En ny version av tidsplanen finns.</span><button class="btn primary" id="nvReload" type="button">Uppdatera nu</button><button class="btn later" id="nvLater" type="button">Senare</button></div>
 <div class="tip" id="tip" hidden></div>
 
 <script>
@@ -1094,6 +1099,21 @@ $("bkCreate").onclick=async()=>{const b=$("bkCreate");b.disabled=true;$("bkMsg")
   if(error){$("bkMsg").textContent="Kunde inte skapa backup: "+error.message;return}
   $("bkLabel").value="";$("bkMsg").textContent="Backup skapad.";bkLoad()};
 async function bkDaily(){const {error}=await sb.rpc("ensure_daily_backup");if(error&&/function|schema cache|PGRST202/i.test(error.message+(error.code||"")))$("btnBackup").hidden=true}
+// ---------- ny version ----------
+const APP_BUILD="20260928-101846";let nvSnooze=0,nvFound=false;
+async function checkVersion(){
+  if(nvFound&&Date.now()<nvSnooze)return;
+  try{const r=await fetch(location.pathname+"?v="+Date.now(),{cache:"no-store"});if(!r.ok)return;const t=await r.text();
+    const m=t.match(/const APP_BUILD="([^"]+)"/);if(m&&m[1]!==APP_BUILD&&m[1]!=="__BUILD__"){nvFound=true;if(Date.now()>=nvSnooze)$("newVer").hidden=false}}catch(e){}
+}
+$("nvReload").onclick=async()=>{const b=$("nvReload");b.disabled=true;b.textContent="Sparar…";
+  timers.forEach((t,id)=>{clearTimeout(t);timers.delete(id);persist(id)});
+  try{await Promise.race([Promise.all([...chains.values()]),new Promise(r=>setTimeout(r,4000))])}catch(e){}
+  location.reload()};
+$("nvLater").onclick=()=>{$("newVer").hidden=true;nvSnooze=Date.now()+30*60*1000};
+setInterval(checkVersion,5*60*1000);
+document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")checkVersion()});
+window.addEventListener("focus",checkVersion);
 // ---------- planer ----------
 function saveOv(){try{localStorage.setItem("tidsplan-ov",JSON.stringify([...ovCollapsed]))}catch(e){}}
 function fillPlanSel(){const sel=$("planSel");sel.innerHTML="";{const o=el("option",null,"Översikt – alla planer");o.value=OV;sel.append(o)}[...plans.values()].sort((a,b)=>a.title.localeCompare(b.title,"sv")).forEach(p=>{const o=el("option",null,p.title);o.value=p.id;sel.append(o)});if(planId)sel.value=planId}
