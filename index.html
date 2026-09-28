@@ -122,6 +122,28 @@ button,input,textarea{font:inherit;color:inherit}
 .row.plan .lname .nm{font-size:15px}
 .psum.fixed{cursor:default}
 .ovnote{font-size:12px;color:var(--muted)}
+#bkDlg{width:min(640px,calc(100% - 32px))}
+.bklist{display:flex;flex-direction:column;gap:8px;max-height:46vh;overflow:auto}
+.bk{border:1px solid var(--line2);border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;background:var(--surface2)}
+.bk .top1{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:baseline}
+.bk b{font-size:14px}.bk .meta{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.bk .tag{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;border:1px solid var(--line2);border-radius:4px;padding:1px 5px;margin-left:6px;color:var(--muted)}
+.bk .acts{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.bk .acts .btn{padding:5px 10px;font-size:12.5px}
+.bk select{border:1px solid var(--line2);background:var(--surface);border-radius:6px;padding:4px 6px;font:inherit;font-size:12.5px;max-width:220px}
+.bknew{display:flex;gap:8px}.bknew input{flex:1;min-width:0;border:1px solid var(--line2);background:var(--surface2);border-radius:5px;padding:7px 9px}
+.btn:disabled{opacity:.42;cursor:not-allowed}
+.btn.edit{font-weight:600;display:inline-flex;align-items:center;gap:7px}
+.btn.edit::before{content:"";width:9px;height:11px;border:2px solid currentColor;border-radius:2px 2px 3px 3px;box-sizing:border-box;box-shadow:inset 0 3px 0 -1px transparent}
+.btn.edit.on{background:#2F7D3B;border-color:#2F7D3B;color:#fff;font-variant-numeric:tabular-nums}
+.btn.edit.on::before{border-radius:50%;width:9px;height:9px;background:#fff;border:0}
+body:not(.editing) .seg,body:not(.editing) .psum{cursor:pointer}
+body:not(.editing) .track{cursor:default}
+body:not(.editing) .seg::before,body:not(.editing) .seg::after{display:none}
+body:not(.editing) .addc,body:not(.editing) .row.newrow{display:none}
+body.editing .gwrap{border-color:#2F7D3B;box-shadow:0 0 0 1px #2F7D3B}
+.lockhint{font-weight:600;color:var(--ink)}
+#panel .ronote{font-size:12.5px;color:var(--muted);background:var(--surface2);border:1px solid var(--line);border-radius:6px;padding:7px 10px}
 .planbar>*{align-self:center}
 .planbar .fschip{align-self:center;height:28px;padding-top:0;padding-bottom:0}
 .planbar .btn,.planbar select{height:30px}
@@ -239,7 +261,7 @@ button,input,textarea{font:inherit;color:inherit}
   <button class="btn danger" id="btnDelPlan">Ta bort plan</button>
   <button class="fschip" id="liveChip" type="button" title="Anslutning för realtidsuppdateringar"><span id="liveTxt">Ansluter…</span></button>
   <div class="online" id="online" aria-label="Inloggade just nu"></div>
-  <div class="userbox"><span id="userEmail"></span><button class="btn" id="btnPeople">Resurser</button><button class="btn" id="btnCal">Min kalender</button><button class="btn" id="btnPw">Byt lösenord</button><button class="btn" id="btnLogout">Logga ut</button></div>
+  <div class="userbox"><span id="userEmail"></span><button class="btn" id="btnPeople">Resurser</button><button class="btn" id="btnCal">Min kalender</button><button class="btn" id="btnBackup">Backup</button><button class="btn" id="btnPw">Byt lösenord</button><button class="btn" id="btnLogout">Logga ut</button></div>
 </div>
 <div class="top">
   <div class="titlebox">
@@ -252,6 +274,7 @@ button,input,textarea{font:inherit;color:inherit}
     <div class="stat"><b id="stSpan">–</b><span>Period</span></div>
   </div>
   <div class="tools">
+    <button class="btn edit" id="btnEdit" aria-pressed="false" title="Lås upp för att kunna ändra. Låses automatiskt efter 3 minuter utan aktivitet.">Redigera</button>
     <button class="btn primary" id="btnProj">+ Nytt projekt</button>
     <button class="btn" id="btnTpl">+ Apparatskåp (mall)</button>
     <button class="btn" id="btnAdd">+ Nytt moment</button>
@@ -270,6 +293,7 @@ button,input,textarea{font:inherit;color:inherit}
   </div>
 </div>
 <div class="hint">
+  <span class="lockhint" id="lockHint">Låst – tryck Redigera för att ändra</span>
   <span>Dra stapeln för att flytta · dra i kanten för att ändra längd</span>
   <span>Dra på tom yta i en rad = ny period</span>
   <span><kbd>Dubbelklick</kbd> på stapel = dela momentet där</span>
@@ -290,6 +314,7 @@ button,input,textarea{font:inherit;color:inherit}
 <div class="scrim" id="scrim" hidden></div>
 <aside class="panel" id="panel" hidden aria-label="Redigera moment">
   <div class="prow"><h2 id="pHead">Redigera moment</h2><button class="btn" id="pClose">Stäng</button></div>
+  <div class="ronote" id="fRoNote" hidden>Låst för ändringar – tryck <b>Redigera</b> för att ändra.</div>
   <div class="field"><label for="fName" id="fNameLbl">Moment</label><input id="fName" autocomplete="off"></div>
   <div class="field"><label>Färg</label><div class="swatches" id="fColors" role="radiogroup" aria-label="Färg"></div></div>
   <div class="field" id="fWhoBox"><label for="fWho">Resurs</label><select id="fWho"></select></div>
@@ -336,6 +361,14 @@ button,input,textarea{font:inherit;color:inherit}
   <div class="mlist" id="pplList"></div>
   <p class="notice">Nya personer läggs till i Supabase (allowed_emails + Authentication → Users).</p>
   <div class="prow"><span></span><button class="btn" id="pplClose">Stäng</button></div>
+</div>
+<div class="idlg" id="bkDlg" hidden role="dialog" aria-modal="true" aria-labelledby="bkHead">
+  <div class="prow"><h2 id="bkHead">Backup</h2><button class="btn" id="bkClose">Stäng</button></div>
+  <p>En backup sparar <b>alla planer och moment</b> i databasen. Du kan återställa allt, eller bara en enskild plan. Innan en återställning görs sparas nuläget automatiskt, så den går att ångra.</p>
+  <div class="field"><label for="bkLabel">Ny backup</label><div class="bknew"><input id="bkLabel" placeholder="Namn, t.ex. Före ombokning v42" maxlength="120"><button class="btn primary" id="bkCreate">Skapa backup nu</button></div></div>
+  <p class="notice" id="bkMsg"></p>
+  <div class="bklist" id="bkList"></div>
+  <p class="notice">En automatisk backup görs en gång per dygn när någon loggar in. Automatiska backuper sparas i 30 dagar, manuella tills du tar bort dem. Återställning kräver att <b>Redigera</b> är aktiverat.</p>
 </div>
 <div class="tip" id="tip" hidden></div>
 
@@ -533,7 +566,7 @@ function render(){
   if(isOv()){$("btnFold").hidden=!plans.size;$("btnFold").textContent=[...plans.keys()].some(k=>!ovCollapsed.has(k))?"Fäll ihop alla planer":"Fäll ut alla planer"}
   else{const ps=[...tasks].filter(([,t])=>t.kind==="project");$("btnFold").hidden=!ps.length;$("btnFold").textContent=ps.some(([,t])=>!t.collapsed)?"Fäll ihop alla":"Fäll ut alla"}
   $("btnMine").setAttribute("aria-pressed",String(mineOnly));$("btnMine").hidden=!resOK;
-  ["btnProj","btnTpl","btnAdd","btnImport","btnDelPlan","btnSaveJson"].forEach(b=>{const e=$(b);if(e)e.hidden=isOv()});$("planTitle").readOnly=isOv();
+  ["btnProj","btnTpl","btnAdd","btnImport","btnDelPlan","btnSaveJson"].forEach(b=>{const e=$(b);if(e)e.hidden=isOv()});$("planTitle").readOnly=isOv()||!editMode;
   $("stSpan").textContent=isFinite(mn)?`${fd(mn)} – ${fd(mx)} (${workdays(mn,mx)} dgr)`:"–";
   $("gwrap").scrollLeft=sl;
   if(openId)fillPanelSummary();
@@ -543,7 +576,7 @@ function render(){
 const gw=$("gwrap"),tip=$("tip");
 function showTip(x,y,txt){tip.textContent=txt;tip.hidden=false;tip.style.left=Math.min(x+14,innerWidth-tip.offsetWidth-8)+"px";tip.style.top=y+16+"px"}
 gw.addEventListener("pointerdown",ev=>{
-  if(ev.button!==0)return;
+  if(ev.button!==0||!editMode)return;
   const seg=ev.target.closest(".seg"),tr=ev.target.closest(".track"),ps=ev.target.closest(".psum");
   if(!tr)return;
   if(isPlanRow(tr.dataset.id))return; // planrader i översikten flyttas inte
@@ -604,7 +637,7 @@ function normalize(t){ // sortera och slå ihop överlappande perioder
   const out=[];for(const p of t.segs){const l=out[out.length-1];if(l&&p[0]<=l[1]){l[1]=Math.max(l[1],p[1])}else out.push([p[0],p[1]])}t.segs=out;
 }
 gw.addEventListener("dblclick",ev=>{
-  const seg=ev.target.closest(".seg");if(!seg)return;
+  const seg=ev.target.closest(".seg");if(!seg)return;if(!editMode){openPanel(seg.dataset.id);return}
   const id=seg.dataset.id,k=+seg.dataset.k,t=tasks.get(id);const[s,e]=t.segs[k];
   const rect=seg.parentElement.getBoundingClientRect();const col=Math.floor((ev.clientX-rect.left)/DW);
   const a=toIdx(s,true),b=toIdx(e,false);
@@ -615,6 +648,7 @@ gw.addEventListener("dblclick",ev=>{
   setSave("Momentet delades – dra den andra delen dit den ska ligga.");
 });
 gw.addEventListener("keydown",ev=>{ // tangentbord: piltangenter flyttar vald period
+  if(!editMode&&(ev.key==="ArrowLeft"||ev.key==="ArrowRight"))return;
   const pp=ev.target.closest&&ev.target.closest(".psum");
   if(pp){if(isPlanRow(pp.dataset.id))return;if(ev.key==="Enter"){openPanel(pp.dataset.id);return}if(ev.key!=="ArrowLeft"&&ev.key!=="ArrowRight")return;ev.preventDefault();const pid=pp.dataset.id;shiftProject(pid,ev.key==="ArrowRight"?1:-1);render();const again=gw.querySelector(`.psum[data-id="${pid}"]`);again&&again.focus();return}
   const seg=ev.target.closest&&ev.target.closest(".seg");if(!seg)return;
@@ -626,10 +660,11 @@ gw.addEventListener("keydown",ev=>{ // tangentbord: piltangenter flyttar vald pe
   const again=[...document.querySelectorAll(`.seg[data-id="${id}"]`)].find(x=>+x.dataset.k===Math.min(k,t.segs.length-1));again&&again.focus();
 });
 $("gbody").addEventListener("click",ev=>{
+  if(!editMode){const sg=ev.target.closest(".seg,.psum");if(sg&&!isPlanRow(sg.dataset.id)){openPanel(sg.dataset.id);return}}
   const tg=ev.target.closest("[data-toggle]");if(tg&&isPlanRow(tg.dataset.toggle)){const u=tg.dataset.toggle.slice(5);ovCollapsed.has(u)?ovCollapsed.delete(u):ovCollapsed.add(u);saveOv();render();const f=gw.querySelector(`[data-toggle="${tg.dataset.toggle}"]`);f&&f.focus();return}
   if(tg){const t=tasks.get(tg.dataset.toggle);t.collapsed=!t.collapsed;persistSoon(tg.dataset.toggle);render();const f=gw.querySelector(`[data-toggle="${tg.dataset.toggle}"]`);f&&f.focus();return}
-  const ac=ev.target.closest("[data-addchild]");if(ac){addChild(ac.dataset.addchild);return}
-  const b=ev.target.closest("[data-open]");if(b&&isPlanRow(b.dataset.open)){openPlan(b.dataset.open.slice(5));return}if(b)openPanel(b.dataset.open);if(ev.target.closest("#newRowBtn"))openNew()});
+  const ac=ev.target.closest("[data-addchild]");if(ac){if(editMode)addChild(ac.dataset.addchild);return}
+  const b=ev.target.closest("[data-open]");if(b&&isPlanRow(b.dataset.open)){openPlan(b.dataset.open.slice(5));return}if(b)openPanel(b.dataset.open);if(ev.target.closest("#newRowBtn")&&editMode)openNew()});
 
 // ---------- editor ----------
 function nextFree(list){return snapStart(Math.max(TODAY,list.reduce((m,[,t])=>Math.max(m,...t.segs.map(x=>x[1]+1)),TODAY)))}
@@ -662,7 +697,8 @@ function openPanel(id,focusName){
   const sw=$("fColors");sw.innerHTML="";COLORS.forEach(([n,h])=>{const b=el("button","swatch");b.type="button";b.style.background=h;b.title=n;b.setAttribute("role","radio");b.setAttribute("aria-label",n);b.setAttribute("aria-checked",String(t.color===n));b.onclick=()=>{const tt=tasks.get(id);if(!tt)return;const old=tt.color;tt.color=n;persistSoon(id);
     if(tt.kind==="project")kids(id).forEach(([cid,c])=>{if(c.color===old){c.color=n;persistSoon(cid)}});openPanel(id);render()};sw.append(b)});
   if(!P)renderPeriods();else fillPanelSummary();$("panel").hidden=false;$("scrim").hidden=false;$("fDelete").classList.remove("armed");$("fDelete").textContent=P?"Ta bort projekt":"Ta bort moment";
-  if(focusName){$("fName").focus();$("fName").select()}
+  applyPanelRO();
+  if(focusName&&editMode){$("fName").focus();$("fName").select()}
 }
 function renderPeriods(){
   const t=tasks.get(openId);const box=$("fPeriods");box.innerHTML="";
@@ -938,7 +974,7 @@ async function loadMembers(){
   resOK=true;members=new Map(data.map(m=>[m.email.toLowerCase(),m.display_name||""]));["btnPeople","btnCal"].forEach(b=>$(b).hidden=false);
 }
 function xOpen(id){$(id).hidden=false;$("xScrim").hidden=false}
-function xClose(){["calDlg","pplDlg"].forEach(i=>$(i).hidden=true);$("xScrim").hidden=true}
+function xClose(){["calDlg","pplDlg","bkDlg"].forEach(i=>$(i).hidden=true);$("xScrim").hidden=true}
 $("xScrim").onclick=xClose;$("calClose").onclick=xClose;$("pplClose").onclick=()=>{xClose();render()};
 document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("xScrim").hidden)xClose()});
 const calLink=tok=>`${SB_ORIGIN}/functions/v1/calendar?token=${tok}`;
@@ -958,7 +994,7 @@ $("btnPeople").onclick=()=>{
   [...members.keys()].sort().forEach(e=>{
     const ts=[...tasks.values()].filter(t=>t.kind==="task"&&t.assignee===e);const h=ts.reduce((a,t)=>a+(t.hours||0),0);
     const row=el("div","mrow");const badge=whoBadge(e);const inp=el("input");inp.value=members.get(e)||"";inp.placeholder=personName(e);inp.setAttribute("aria-label","Namn för "+e);
-    inp.onchange=async()=>{const {error}=await sb.rpc("set_member_name",{p_email:e,p_name:inp.value});if(error){setSave(error.message,true);return}members.set(e,inp.value.trim());badge.textContent=initials(e);setSave("Namnet är sparat.")};
+    inp.disabled=!editMode;inp.onchange=async()=>{if(!editMode)return;const {error}=await sb.rpc("set_member_name",{p_email:e,p_name:inp.value});if(error){setSave(error.message,true);return}members.set(e,inp.value.trim());badge.textContent=initials(e);setSave("Namnet är sparat.")};
     row.append(badge,inp,el("small",null,`${e} · ${ts.length} moment${h?" · "+String(Math.round(h*10)/10).replace(".",",")+" h":""}${isOv()?"":" i den här planen"}`));box.append(row)});
   xOpen("pplDlg");
 };
@@ -981,6 +1017,71 @@ function startPresence(){
     .subscribe(st=>{if(st==="SUBSCRIBED"){pchan._joined=true;presTrack()}});
 }
 window.addEventListener("beforeunload",()=>{try{pchan&&pchan.untrack()}catch(e){}});
+// ---------- redigeringslås ----------
+let editMode=false,lastAct=Date.now();const EDIT_MS=3*60*1000;
+const EDIT_BTNS=["btnProj","btnTpl","btnAdd","btnImport","btnDelPlan","btnNewPlan"];
+function applyPanelRO(){const ro=!editMode;$("fRoNote").hidden=!ro;
+  $("panel").querySelectorAll("input,select,textarea,button").forEach(e=>{if(e.id!=="pClose")e.disabled=ro});
+  $("fDelete").hidden=ro;$("fAddPeriod").hidden=ro;}
+function setEdit(on,msg){
+  editMode=!!on;lastAct=Date.now();document.body.classList.toggle("editing",editMode);
+  const b=$("btnEdit");b.classList.toggle("on",editMode);b.setAttribute("aria-pressed",String(editMode));
+  EDIT_BTNS.forEach(id=>{const e=$(id);if(e){e.disabled=!editMode;e.title=editMode?"":"Tryck Redigera först"}});
+  $("planTitle").readOnly=isOv()||!editMode;$("lockHint").hidden=editMode;
+  document.querySelectorAll("#pplList input").forEach(i=>i.disabled=!editMode);
+  if(!$("panel").hidden)applyPanelRO();
+  if(!$("bkDlg").hidden)$("bkList").querySelectorAll(".acts .btn:not(.danger),.acts select").forEach(x=>x.disabled=!editMode);
+  editTick();if(msg)setSave(msg);
+}
+function editTick(){const b=$("btnEdit");if(!editMode){b.textContent="Redigera";return}
+  const rem=Math.max(0,EDIT_MS-(Date.now()-lastAct));
+  if(rem<=0&&!dragging){setEdit(false,"Redigeringen låstes efter 3 minuter utan aktivitet.");return}
+  const m=Math.floor(rem/60000),sec=Math.floor(rem%60000/1000);b.textContent=`Redigerar ${m}:${String(sec).padStart(2,"0")} – lås`}
+setInterval(editTick,1000);
+["pointerdown","keydown","wheel","input","pointermove"].forEach(t=>document.addEventListener(t,()=>{if(editMode)lastAct=Date.now()},{capture:true,passive:true}));
+$("btnEdit").onclick=()=>setEdit(!editMode,editMode?"Redigeringen är låst.":"Redigering upplåst – låses automatiskt efter 3 minuter utan aktivitet.");
+// ---------- backup ----------
+let bkOK=true;
+const bkWhen=d=>new Date(d).toLocaleString("sv-SE",{year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"});
+const KIND={manual:"Manuell",auto:"Automatisk",safety:"Före återställning"};
+function arm(btn,text,fn){if(!btn.classList.contains("armed")){const orig=btn.textContent;btn.classList.add("armed");btn.textContent=text;setTimeout(()=>{if(btn.isConnected){btn.classList.remove("armed");btn.textContent=orig}},4500);return}btn.classList.remove("armed");fn()}
+async function bkLoad(){
+  const box=$("bkList");box.innerHTML="";box.append(el("span","notice","Hämtar…"));
+  const {data,error}=await sb.rpc("list_backups");box.innerHTML="";
+  if(error){box.append(el("span","notice",/function|schema cache|PGRST202/i.test(error.message)?"Backupfunktionen är inte installerad – kör supabase_v3_backup.sql i Supabase.":"Kunde inte hämta backuper: "+error.message));return}
+  if(!data.length){box.append(el("span","notice","Inga backuper ännu."));return}
+  data.forEach(b=>{
+    const card=el("div","bk");const top=el("div","top1");const t=el("div");const nm=el("b",null,b.label);t.append(nm,el("span","tag",KIND[b.kind]||b.kind));
+    top.append(t,el("span","meta",`${bkWhen(b.created_at)} · ${b.plan_count} ${b.plan_count===1?"plan":"planer"} · ${b.item_count} ${b.item_count===1?"rad":"rader"}${b.created_email?" · "+personName(b.created_email):""}`));
+    const acts=el("div","acts");
+    const all=el("button","btn","Återställ allt");all.type="button";
+    const sel=el("select");sel.setAttribute("aria-label","Välj plan att återställa");(b.plans||[]).forEach(p=>{const o=el("option",null,p.title);o.value=p.id;sel.append(o)});
+    const one=el("button","btn","Återställ vald plan");one.type="button";
+    const del=el("button","btn danger","Ta bort");del.type="button";
+    [all,one,sel].forEach(x=>x.disabled=!editMode);if(!editMode)all.title=one.title="Tryck Redigera först";
+    all.onclick=()=>arm(all,"Klicka igen – ersätter ALLA planer",()=>bkRestore(b.id,null));
+    one.onclick=()=>arm(one,"Klicka igen – ersätter planen",()=>bkRestore(b.id,sel.value));
+    del.onclick=()=>arm(del,"Klicka igen – tar bort backupen",async()=>{const {error}=await sb.rpc("delete_backup",{p_id:b.id});if(error){$("bkMsg").textContent=error.message;return}card.remove()});
+    acts.append(all,sel,one,del);if(!(b.plans||[]).length){sel.hidden=true;one.hidden=true}
+    card.append(top,acts);box.append(card)});
+}
+async function bkRestore(id,plan){
+  if(!editMode){$("bkMsg").textContent="Tryck Redigera först.";return}
+  $("bkMsg").textContent="Återställer…";
+  const {data,error}=await sb.rpc("restore_backup",plan?{p_id:id,p_plan:plan}:{p_id:id});
+  if(error){$("bkMsg").textContent="Återställningen misslyckades: "+error.message;return}
+  $("bkMsg").textContent=`Klart – ${data.plans} plan(er) och ${data.items} rader återställda. Nuläget sparades först som backup ("Före återställning").`;
+  try{await loadPlans()}catch(e){}
+  const target=plan||(plans.has(planId)||planId===OV?planId:[...plans.keys()][0]);if(target)await openPlan(target);
+  bkLoad();setSave("Backup återställd.");
+}
+$("btnBackup").onclick=()=>{xOpen("bkDlg");$("bkMsg").textContent="";$("bkLabel").value="";bkLoad()};
+$("bkClose").onclick=xClose;
+$("bkCreate").onclick=async()=>{const b=$("bkCreate");b.disabled=true;$("bkMsg").textContent="Skapar backup…";
+  const {error}=await sb.rpc("create_backup",{p_label:$("bkLabel").value,p_kind:"manual"});b.disabled=false;
+  if(error){$("bkMsg").textContent="Kunde inte skapa backup: "+error.message;return}
+  $("bkLabel").value="";$("bkMsg").textContent="Backup skapad.";bkLoad()};
+async function bkDaily(){const {error}=await sb.rpc("ensure_daily_backup");if(error&&/function|schema cache|PGRST202/i.test(error.message+(error.code||"")))$("btnBackup").hidden=true}
 // ---------- planer ----------
 function saveOv(){try{localStorage.setItem("tidsplan-ov",JSON.stringify([...ovCollapsed]))}catch(e){}}
 function fillPlanSel(){const sel=$("planSel");sel.innerHTML="";{const o=el("option",null,"Översikt – alla planer");o.value=OV;sel.append(o)}[...plans.values()].sort((a,b)=>a.title.localeCompare(b.title,"sv")).forEach(p=>{const o=el("option",null,p.title);o.value=p.id;sel.append(o)});if(planId)sel.value=planId}
@@ -1058,7 +1159,7 @@ async function startApp(session){
   if(error){showAuth("login","Kunde inte kontrollera behörighet: "+error.message);return}
   if(!ok){showAuth("denied");return}
   $("auth").hidden=true;started=true;
-  await loadMembers();startPresence();
+  await loadMembers();startPresence();setEdit(false);bkDaily();
   try{await loadPlans()}catch(e){setSave(sbErr(e),true);return}
   let id=null;try{id=localStorage.getItem("tidsplan-plan")}catch(e){}
   if(!id||(!plans.has(id)&&id!==OV))id=[...plans.keys()][0];
