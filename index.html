@@ -122,6 +122,11 @@ button,input,textarea{font:inherit;color:inherit}
 .row.plan .lname .nm{font-size:15px}
 .psum.fixed{cursor:default}
 .ovnote{font-size:12px;color:var(--muted)}
+.depsvg{position:absolute;top:0;pointer-events:none;z-index:1;overflow:visible}
+.deperr{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:#D0342C;color:#fff;font-size:11px;font-weight:700;flex:0 0 16px}
+.psum .hit{position:absolute;left:0;right:0;top:-7px;bottom:-12px}
+#fDepAdd{border:1px solid var(--line2);background:var(--surface2);border-radius:5px;padding:6px 8px;font:inherit;font-size:13px;max-width:100%;margin-top:6px}
+.depstate{font-size:12.5px;margin-top:6px}.depstate.ok{color:#2F7D3B}.depstate.bad{color:#D0342C;font-weight:600}
 .appfoot{font-size:11px;color:var(--muted);text-align:center;letter-spacing:.02em;padding-top:2px;font-variant-numeric:tabular-nums}
 .newver{position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:60;display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:var(--ink);color:var(--bg);padding:10px 12px 10px 16px;border-radius:10px;box-shadow:var(--shadow);max-width:calc(100% - 32px);font-size:14px}
 .newver .btn{padding:6px 12px}
@@ -291,6 +296,7 @@ body.editing .gwrap{border-color:#2F7D3B;box-shadow:0 0 0 1px #2F7D3B}
     <button class="btn primary" id="btnProj">+ Nytt projekt</button>
     <button class="btn" id="btnTpl">+ Apparatskåp (mall)</button>
     <button class="btn" id="btnAdd">+ Nytt moment</button>
+    <button class="btn" id="btnDeps" aria-pressed="true" title="Visa pilar för beroenden mellan moment">Beroenden</button>
     <button class="btn" id="btnMine" aria-pressed="false" title="Visa bara moment där du är resurs">Bara mina</button>
     <button class="btn" id="btnFold">Fäll ihop alla</button>
     <button class="btn" id="btnToday">Idag</button>
@@ -307,6 +313,7 @@ body.editing .gwrap{border-color:#2F7D3B;box-shadow:0 0 0 1px #2F7D3B}
 </div>
 <div class="hint">
   <span class="lockhint" id="lockHint">Låst – tryck Redigera för att ändra</span>
+  <span>Grön pil = rätt ordning · röd pil = ett moment börjar innan det föregående är klart</span>
   <span>Dra stapeln för att flytta · dra i kanten för att ändra längd</span>
   <span>Dra på tom yta i en rad = ny period</span>
   <span><kbd>Dubbelklick</kbd> på stapel = dela momentet där</span>
@@ -332,6 +339,7 @@ body.editing .gwrap{border-color:#2F7D3B;box-shadow:0 0 0 1px #2F7D3B}
   <div class="field"><label for="fName" id="fNameLbl">Moment</label><input id="fName" autocomplete="off"></div>
   <div class="field"><label>Färg</label><div class="swatches" id="fColors" role="radiogroup" aria-label="Färg"></div></div>
   <div class="field" id="fWhoBox"><label>Resurser <span class="notice">(klicka för att välja en eller flera)</span></label><div class="whopick" id="fWho" role="group" aria-label="Resurser"></div></div>
+  <div class="field" id="fDepBox"><label>Följer efter <span class="notice">(ska vara klara innan detta moment börjar)</span></label><div class="whopick" id="fDeps" role="group" aria-label="Följer efter"></div><select id="fDepAdd" aria-label="Lägg till annat moment att följa efter"></select><div class="depstate" id="fDepState"></div></div>
   <div class="field" id="fParentBox"><label for="fParent">Projekt</label><select id="fParent"></select></div>
   <div class="field" id="fChildBox" hidden><label>Undermoment</label><div class="notice" id="fChildInfo"></div><div><button class="btn" id="fAddChild">+ Lägg till undermoment</button></div></div>
   <div class="field" id="fHoursBox"><label for="fHours">Timmar</label><input id="fHours" type="number" min="0" step="0.5" inputmode="decimal"></div>
@@ -350,7 +358,7 @@ body.editing .gwrap{border-color:#2F7D3B;box-shadow:0 0 0 1px #2F7D3B}
 <div class="scrim" id="tScrim" hidden></div>
 <div class="idlg" id="tDlg" hidden role="dialog" aria-modal="true" aria-labelledby="tHead">
   <h2 id="tHead">Nytt apparatskåp från mall</h2>
-  <p>Skapar skåpet med momenten Driftkort, Elschema, Programmering och Driftsättning, 3 arbetsdagar vardera efter varandra. Helger och röda dagar hoppas över.</p>
+  <p>Skapar skåpet med Driftkort och Elschema (parallellt, 3 dagar) → Granskning (3 dagar) → Prog (3 dagar) → Leverans (1 dag). Beroendena kopplas automatiskt. Helger och röda dagar hoppas över.</p>
   <div class="field"><label for="tName">Apparatskåp</label><input id="tName" autocomplete="off" placeholder="t.ex. AS1"></div>
   <div class="field"><label for="tStart">Startdatum</label><input id="tStart" type="date"></div>
   <p class="notice" id="tPreview"></p>
@@ -438,9 +446,9 @@ const FS={dead:new Map(),titleMod:0}; // behålls för kompatibilitet med import
 function lsSave(){}
 function lsLoad(){return false}
 const chains=new Map();
-const toRow=(id,t)=>({assignee:joinWho(whoList(t))||null,id,plan_id:t.planId||planId,kind:t.kind||"task",parent:t.parent||null,name:t.name,color:t.color,hours:t.hours||0,note:t.note||"",collapsed:!!t.collapsed,
+const toRow=(id,t)=>({deps:depList(t).join(",")||null,assignee:joinWho(whoList(t))||null,id,plan_id:t.planId||planId,kind:t.kind||"task",parent:t.parent||null,name:t.name,color:t.color,hours:t.hours||0,note:t.note||"",collapsed:!!t.collapsed,
   segs:t.segs.map(([s,e])=>({s:fd(s),e:fd(e)})),created:Math.round(t.created||0)});
-const fromRow=r=>({assignee:(r.assignee||"").toLowerCase(),planId:r.plan_id,mod:Date.parse(r.updated_at)||0,who:r.updated_email||"",at:r.updated_at||"",kind:r.kind==="project"?"project":"task",parent:r.parent||"",collapsed:!!r.collapsed,
+const fromRow=r=>({deps:r.deps||"",assignee:(r.assignee||"").toLowerCase(),planId:r.plan_id,mod:Date.parse(r.updated_at)||0,who:r.updated_email||"",at:r.updated_at||"",kind:r.kind==="project"?"project":"task",parent:r.parent||"",collapsed:!!r.collapsed,
   name:r.name||"",color:CMAP[r.color]?r.color:"Blå",hours:Number(r.hours)||0,note:r.note||"",created:Number(r.created)||0,
   segs:(Array.isArray(r.segs)?r.segs:[]).filter(p=>p&&p.s&&p.e).map(p=>[pd(p.s),pd(p.e)])});
 function sbErr(e){const m=(e&&(e.message||e.error_description))||"";return /JWT|expired|401/i.test(m)?"Inloggningen har gått ut – logga in igen.":/fetch|network|Failed/i.test(m)?"Ingen anslutning – ändringen sparas när du är uppkopplad igen.":"Kunde inte spara: "+m}
@@ -498,6 +506,33 @@ function whoBadge(e){const b=el("span","who"+(e===myEmail()?" me":""),initials(e
 let myFold=new Set();try{myFold=new Set(JSON.parse(localStorage.getItem("tidsplan-fold")||"[]"))}catch(e){}
 function saveFold(){try{localStorage.setItem("tidsplan-fold",JSON.stringify([...myFold]))}catch(e){}}
 const isColl=(id,t)=>t.kind==="plan"?!!t.collapsed:myFold.has(id);
+// ---------- beroenden ----------
+let showDeps=true;try{showDeps=localStorage.getItem("tidsplan-deps")!=="0"}catch(e){}
+const depList=t=>String(t&&t.deps||"").split(",").map(x=>x.trim()).filter(Boolean);
+const tStart=t=>t&&t.segs&&t.segs.length?Math.min(...t.segs.map(x=>x[0])):null;
+const tEnd=t=>t&&t.segs&&t.segs.length?Math.max(...t.segs.map(x=>x[1])):null;
+function depCheck(id){const t=tasks.get(id);const out=[];if(!t)return out;const s=tStart(t);
+  depList(t).forEach(pid=>{const p=tasks.get(pid);if(!p||p.kind!=="task")return;const e=tEnd(p);if(s==null||e==null)return;out.push({pid,p,ok:s>=e})});return out}
+const depBad=id=>depCheck(id).filter(d=>!d.ok);
+function dependsOn(a,b,seen=new Set()){ // gör a (direkt eller indirekt) beroende av b?
+  if(a===b)return true;if(seen.has(a))return false;seen.add(a);return depList(tasks.get(a)).some(x=>dependsOn(x,b,seen))}
+function drawDeps(rowEls,body){
+  if(!showDeps)return;const NS="http://www.w3.org/2000/svg";const W=NDAYS*DW,H=body.scrollHeight;
+  const svg=document.createElementNS(NS,"svg");svg.setAttribute("class","depsvg");svg.setAttribute("width",W);svg.setAttribute("height",H);svg.style.left="var(--leftW)";
+  const defs=document.createElementNS(NS,"defs");
+  [["ok","#3F9A4A"],["bad","#D0342C"]].forEach(([k,c])=>{const m=document.createElementNS(NS,"marker");m.setAttribute("id","arr-"+k);m.setAttribute("viewBox","0 0 8 8");m.setAttribute("refX","7");m.setAttribute("refY","4");m.setAttribute("markerWidth","7");m.setAttribute("markerHeight","7");m.setAttribute("orient","auto");
+    const p=document.createElementNS(NS,"path");p.setAttribute("d","M0,0 L8,4 L0,8 z");p.setAttribute("fill",c);m.append(p);defs.append(m)});svg.append(defs);
+  let n=0;
+  rowEls.forEach((row,id)=>{const t=tasks.get(id);if(!t||t.kind!=="task")return;const s=tStart(t);if(s==null)return;
+    depCheck(id).forEach(({pid,p,ok})=>{const prow=rowEls.get(pid);if(!prow)return;
+      const x1=(toIdx(tEnd(p),false)+1)*DW-1,y1=prow.offsetTop+prow.offsetHeight/2,x2=toIdx(s,true)*DW+1,y2=row.offsetTop+row.offsetHeight/2;
+      let d;if(x2>=x1+10){const xm=x1+6;d=`M${x1},${y1} H${xm} V${y2} H${x2}`}
+      else{const ym=y2>y1?y2-row.offsetHeight/2:y2+row.offsetHeight/2;d=`M${x1},${y1} H${x1+6} V${ym} H${x2-8} V${y2} H${x2}`}
+      const path=document.createElementNS(NS,"path");path.setAttribute("d",d);path.setAttribute("fill","none");
+      path.setAttribute("stroke",ok?"#3F9A4A":"#D0342C");path.setAttribute("stroke-width",ok?"1.4":"2");if(ok)path.setAttribute("opacity",".75");
+      path.setAttribute("marker-end",`url(#arr-${ok?"ok":"bad"})`);svg.append(path);n++})});
+  if(n)body.append(svg);
+}
 function displayList(all){const out=displayListRaw(all);if(!mineOnly)return out;const me2=myEmail();
   const mine=([,t])=>t.kind==="task"&&hasWho(t,me2);
   return out.filter(({id,t})=>t.kind==="task"?hasWho(t,me2):t.kind==="plan"?planTasks(t.pid).some(mine):kids(id).some(mine))}
@@ -543,6 +578,7 @@ function render(){
   const body=$("gbody");body.innerHTML="";
   const list=displayList(false);let tot=0,mn=Infinity,mx=-Infinity,nTask=0;
   tasks.forEach(t=>{if(t.kind!=="project"){nTask++;tot+=t.hours||0;t.segs.forEach(([s,e])=>{mn=Math.min(mn,s);mx=Math.max(mx,e)})}});
+  const rowEls=new Map();
   list.forEach(({id,t,level})=>{
     const PL=t.kind==="plan";const P=t.kind==="project"||PL;const sp=spanOf(id);
     const row=el("div","row"+(P?" proj":"")+(PL?" plan":"")+(level===1?" child":"")+(level===2?" child2":""));const lc=el("div","lcell");
@@ -553,6 +589,7 @@ function render(){
     nb.append(dot,el("span","nm",t.name));
     if(PL)nb.append(el("span","parts",String(planTasks(t.pid).length)));else if(P)nb.append(el("span","parts",String(kids(id).length)));else if(t.segs.length>1)nb.append(el("span","parts","×"+t.segs.length));
     if(!P&&t.assignee)nb.append(whoBadges(t));
+    if(!P){const bad=depBad(id);if(bad.length){const w=el("span","deperr","!");w.title="Börjar innan "+bad.map(d=>d.p.name).join(", ")+" är klar";w.setAttribute("aria-label",w.title);nb.append(w)}}
     c0.append(nb);
     if(P&&!PL){const ab=el("button","addc","+");ab.setAttribute("aria-label","Lägg till undermoment i "+t.name);ab.type="button";ab.dataset.addchild=id;ab.title="Lägg till undermoment";c0.append(ab)}
     const h=hoursOf(id);
@@ -561,7 +598,7 @@ function render(){
     let lastIdx=null;
     if(P){
       if(sp){const a=toIdx(sp[0],true),b=toIdx(sp[1],false);
-        const d=el("div","psum"+(PL?" fixed":""));d.dataset.id=id;d.tabIndex=PL?-1:0;d.style.left=a*DW+"px";d.style.width=Math.max(1,b-a+1)*DW+"px";d.style.background=CMAP[t.color];d.style.setProperty("--pc",CMAP[t.color]);
+        const d=el("div","psum"+(PL?" fixed":""));if(!PL)d.append(el("i","hit"));d.dataset.id=id;d.tabIndex=PL?-1:0;d.style.left=a*DW+"px";d.style.width=Math.max(1,b-a+1)*DW+"px";d.style.background=CMAP[t.color];d.style.setProperty("--pc",CMAP[t.color]);
         d.setAttribute("aria-label",`Projekt ${t.name}: ${fd(sp[0])} till ${fd(sp[1])}. Piltangenter flyttar hela projektet.`);tr.append(d);lastIdx=b;
         if(isColl(id,t))(PL?planTasks(t.pid):kids(id)).forEach(([,c])=>c.segs.forEach(([s1,e1])=>{const m=el("div","mini");const x=toIdx(s1,true),y=toIdx(e1,false);m.style.left=x*DW+1+"px";m.style.width=Math.max(1,y-x+1)*DW-2+"px";m.style.background=CMAP[c.color];tr.append(m)}));
       }
@@ -573,7 +610,7 @@ function render(){
       });
     }
     if(lastIdx!=null){const lb=el("div","lbl"+(P?" pl":""));lb.style.left=(lastIdx+1)*DW+6+"px";if(!P&&t.assignee)lb.append(whoBadges(t));lb.append(document.createTextNode(t.name));if(h)lb.append(el("small",null,String(Math.round(h*10)/10).replace(".",",")+" h"));tr.append(lb)}
-    row.append(lc,tr);body.append(row);
+    row.append(lc,tr);body.append(row);rowEls.set(id,row);
   });
   // tom rad för nytt moment
   const nr=el("div","row newrow");if(isOv())nr.hidden=true;const nl=el("div","lcell");const nbtn=el("button","lname");nbtn.type="button";nbtn.id="newRowBtn";nbtn.append(el("span","nm","+ Dra i raden eller klicka för nytt moment"));
@@ -583,7 +620,7 @@ function render(){
   const ov=el("div","overlay");ov.style.left="var(--leftW)";ov.style.width=NDAYS*DW+"px";
   for(let k=0;k<NDAYS;k++){const n=atIdx(k);if(HOL[fd(n)]){const s=el("div","strip hol");s.style.left=k*DW+"px";s.style.width=DW+"px";ov.append(s)}
     if(n===TODAY){const s=el("div","strip tod");s.style.left=k*DW+DW/2-1+"px";ov.append(s)}}
-  body.prepend(ov);
+  body.prepend(ov);drawDeps(rowEls,body);$("btnDeps").setAttribute("aria-pressed",String(showDeps));
   $("stN").textContent=nTask;$("stH").textContent=String(Math.round(tot*10)/10).replace(".",",");
   if(isOv()){$("btnFold").hidden=!plans.size;$("btnFold").textContent=[...plans.keys()].some(k=>!ovCollapsed.has(k))?"Fäll ihop alla planer":"Fäll ut alla planer"}
   else{const ps=[...tasks].filter(([,t])=>t.kind==="project");$("btnFold").hidden=!ps.length;$("btnFold").textContent=ps.some(([id])=>!myFold.has(id))?"Fäll ihop alla":"Fäll ut alla"}
@@ -710,6 +747,7 @@ function openPanel(id,focusName){
   $("fName").value=t.name;$("fHours").value=t.hours||"";$("fNote").value=t.note;
   $("pHead").textContent=P?"Redigera projekt":"Redigera moment";$("fNameLbl").textContent=P?"Projekt":"Moment";
   $("fHoursBox").hidden=P;$("fPeriodsBox").hidden=P;$("fParentBox").hidden=P;$("fWhoBox").hidden=P||!resOK;
+  $("fDepBox").hidden=P;if(!P)renderDeps();
   if(!P&&resOK){const ws=$("fWho");ws.innerHTML="";const sel=new Set(whoList(t));
     const all=[...new Set([...members.keys(),...sel])].sort((a,b)=>personName(a).localeCompare(personName(b),"sv"));
     all.forEach(e=>{const b=el("button");b.type="button";b.setAttribute("aria-pressed",String(sel.has(e)));b.append(whoBadge(e),document.createTextNode(personName(e)+(e===myEmail()?" (jag)":"")));
@@ -969,9 +1007,9 @@ $("btnCsv").onclick=async()=>{
 };
 
 // ---------- mall: apparatskåp ----------
-const TPL=[["Driftkort","Orange"],["Elschema","Orange"],["Programmering","Lila"],["Driftsättning","Gul"]],TPL_DAYS=3;
+const TPL=[{n:"Driftkort",c:"Orange",d:3,dep:[]},{n:"Elschema",c:"Orange",d:3,dep:[]},{n:"Granskning",c:"Gul",d:3,dep:[0,1]},{n:"Prog",c:"Lila",d:3,dep:[2]},{n:"Leverans",c:"Grön",d:1,dep:[3]}];
 const nextWorkday=n=>{while(!isWorkday(n))n++;return n};
-function tplPlan(start){let n=nextWorkday(start);return TPL.map(([name,color])=>{const s=n;let c=1,e=n;while(c<TPL_DAYS){e++;if(isWorkday(e))c++}n=nextWorkday(e+1);return {name,color,s,e}})}
+function tplPlan(start){const out=[];TPL.forEach(x=>{const s=x.dep.length?nextWorkday(Math.max(...x.dep.map(i=>out[i].e))+1):nextWorkday(start);let c=1,e=s;while(c<x.d){e++;if(isWorkday(e))c++}out.push({name:x.n,color:x.c,s,e,dep:x.dep})});return out}
 function tplSuggestName(){const nums=[...tasks.values()].filter(t=>t.kind==="project").map(t=>(t.name.match(/^AS\s*(\d+)/i)||[])[1]).filter(Boolean).map(Number);return "AS"+((nums.length?Math.max(...nums):0)+1)}
 function tplPreview(){const v=$("tStart").value;if(!v){$("tPreview").textContent="";return}const p=tplPlan(pd(v));$("tPreview").textContent=p.map(x=>`${x.name} ${fd(x.s).slice(5)}–${fd(x.e).slice(5)}`).join(" · ")}
 function tplOpen(){
@@ -986,7 +1024,7 @@ $("tCreate").onclick=()=>{
   const name=$("tName").value.trim()||tplSuggestName();const v=$("tStart").value;if(!v){$("tStart").focus();return}
   const now=Date.now(),pid=newId();
   tasks.set(pid,{planId,kind:"project",parent:"",collapsed:false,name,color:"Blå",hours:0,note:"",created:now,segs:[]});persist(pid);
-  tplPlan(pd(v)).forEach((x,i)=>{const id=newId();tasks.set(id,{planId,kind:"task",parent:pid,collapsed:false,name:x.name,color:x.color,hours:0,note:"",created:now+1+i,segs:[[x.s,x.e]]});persist(id)});
+  const ids=[];tplPlan(pd(v)).forEach((x,i)=>{const id=newId();ids.push(id);tasks.set(id,{planId,kind:"task",parent:pid,collapsed:false,name:x.name+" "+name,color:x.color,hours:0,note:"",created:now+1+i,segs:[[x.s,x.e]],deps:x.dep.map(j=>ids[j]).join(",")});persist(id)});
   tplClose();render();setSave(`${name} skapat med ${TPL.length} moment.`);
   const el2=gw.querySelector(`.psum[data-id="${pid}"]`);if(el2)gw.scrollLeft=Math.max(0,parseFloat(el2.style.left)-DW*5);
 };
@@ -1040,6 +1078,33 @@ function startPresence(){
     .subscribe(st=>{if(st==="SUBSCRIBED"){pchan._joined=true;presTrack()}});
 }
 window.addEventListener("beforeunload",()=>{try{pchan&&pchan.untrack()}catch(e){}});
+// ---------- beroenden i redigeringspanelen ----------
+function renderDeps(){
+  const t=tasks.get(openId);if(!t)return;const box=$("fDeps");box.innerHTML="";const sel=new Set(depList(t));
+  const sib=[...tasks].filter(([k,x])=>k!==openId&&x.kind==="task"&&x.parent===t.parent&&(x.planId||planId)===(t.planId||planId));
+  const shown=new Map(sib);sel.forEach(k=>{if(tasks.has(k))shown.set(k,tasks.get(k))});
+  [...shown].sort((a,b)=>(tStart(a[1])??1e9)-(tStart(b[1])??1e9)).forEach(([k,x])=>{
+    const b=el("button");b.type="button";b.setAttribute("aria-pressed",String(sel.has(k)));const dot=el("span","dot");dot.style.cssText=`width:10px;height:10px;border-radius:2px;margin-left:6px;background:${CMAP[x.color]}`;
+    b.append(dot,document.createTextNode(x.name+(x.parent!==t.parent&&tasks.get(x.parent)?" ("+tasks.get(x.parent).name+")":"")));
+    b.onclick=()=>{if(!editMode)return;const tt=tasks.get(openId);const cur=new Set(depList(tt));
+      if(cur.has(k))cur.delete(k);else{if(dependsOn(k,openId)){$("fDepState").className="depstate bad";$("fDepState").textContent=`Går inte – ${x.name} följer redan efter det här momentet (det skulle bli en cirkel).`;return}cur.add(k)}
+      tt.deps=[...cur].join(",");persistSoon(openId);render();renderDeps()};box.append(b)});
+  if(!shown.size)box.append(el("span","notice","Inga andra moment i samma projekt."));
+  const add=$("fDepAdd");add.innerHTML="";const o0=el("option",null,"+ Följ efter moment i annat projekt…");o0.value="";add.append(o0);
+  [...tasks].filter(([k,x])=>x.kind==="task"&&k!==openId&&!shown.has(k)&&(x.planId||planId)===(t.planId||planId))
+    .sort((a,b)=>((tasks.get(a[1].parent)||{}).name||"").localeCompare((tasks.get(b[1].parent)||{}).name||"","sv")||(tStart(a[1])??0)-(tStart(b[1])??0))
+    .forEach(([k,x])=>{const o=el("option",null,((tasks.get(x.parent)||{}).name?tasks.get(x.parent).name+" · ":"")+x.name);o.value=k;add.append(o)});
+  add.hidden=add.options.length<=1;add.disabled=!editMode;
+  add.onchange=()=>{const k=add.value;add.value="";if(!k||!editMode)return;const tt=tasks.get(openId);
+    if(dependsOn(k,openId)){$("fDepState").className="depstate bad";$("fDepState").textContent="Går inte – det skulle bli en cirkel.";return}
+    tt.deps=[...new Set([...depList(tt),k])].join(",");persistSoon(openId);render();renderDeps()};
+  const chk=depCheck(openId),bad=chk.filter(d=>!d.ok),st=$("fDepState");
+  if(!chk.length){st.className="depstate";st.textContent=""}
+  else if(bad.length){st.className="depstate bad";st.textContent="Börjar innan "+bad.map(d=>`${d.p.name} (klar ${fd(tEnd(d.p))})`).join(", ")+" är klar."}
+  else{st.className="depstate ok";st.textContent="Ligger i rätt ordning."}
+  if(!editMode)box.querySelectorAll("button").forEach(b=>b.disabled=true);
+}
+$("btnDeps").onclick=()=>{showDeps=!showDeps;try{localStorage.setItem("tidsplan-deps",showDeps?"1":"0")}catch(e){}render()};
 // ---------- redigeringslås ----------
 let editMode=false,lastAct=Date.now();const EDIT_MS=3*60*1000;
 const EDIT_BTNS=["btnProj","btnTpl","btnAdd","btnImport","btnDelPlan","btnNewPlan"];
@@ -1106,7 +1171,7 @@ $("bkCreate").onclick=async()=>{const b=$("bkCreate");b.disabled=true;$("bkMsg")
   $("bkLabel").value="";$("bkMsg").textContent="Backup skapad.";bkLoad()};
 async function bkDaily(){const {error}=await sb.rpc("ensure_daily_backup");if(error&&/function|schema cache|PGRST202/i.test(error.message+(error.code||"")))$("btnBackup").hidden=true}
 // ---------- ny version ----------
-const APP_BUILD="20260928-114424";let nvSnooze=0,nvFound=false;
+const APP_BUILD="20260928-124200";let nvSnooze=0,nvFound=false;
 async function checkVersion(){
   if(nvFound&&Date.now()<nvSnooze)return;
   try{const r=await fetch(location.pathname+"?v="+Date.now(),{cache:"no-store"});if(!r.ok)return;const t=await r.text();
